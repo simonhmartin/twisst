@@ -57,36 +57,169 @@ def sample(things, n = None, replace = False):
   else:
     return [random.choice(things) for i in range(n)]
 
+def randomComboGen(lists):
+    while True:
+        yield tuple(random.choice(l) for l in lists)
+
+
+#new version that does not do simplification, but has a few improvements
 def weightTree(tree, taxa, taxonNames, nIts, topos = None, unrooted = True):
-  if nIts > prod([len(t) for t in taxa]):
-    combos = itertools.product(*taxa)
+    taxonDict = {}
+    for x in range(len(taxa)):
+        for y in taxa[x]:
+            taxonDict[y] = taxonNames[x]
+    leaves = tree.get_leaves()
+    leafNames = [leaf.name for leaf in leaves]
+    #we make a generator object for all combos
+    #this cirmcumvents having to store all combos in memory
+    #if there are more combos than Its, we need to make random samples
     nCombos = prod([len(t) for t in taxa])
-  else:
-    combos = [tuple(sample(x,1)[0] for x in taxa) for n in range(nIts)]
-    nCombos = len(combos)
-  if not topos:
-    topos = []
-  counts = [0]*len(topos)
-  for combo in combos:
-    pruned = tree.copy()
-    pruned.prune(combo)
-    #generify pruned tree
-    for leaf in pruned.iter_leaves():
-      for x in range(len(taxa)):
-        if leaf.name in taxa[x]:
-          leaf.name = taxonNames[x]
-    #check for matches with each topology
-    matchFound = False
-    for x in range(len(topos)):
-      if pruned.robinson_foulds(topos[x], unrooted_trees = unrooted)[0] == 0:
-        counts[x] += 1
-        matchFound = True
-        break
-    if not matchFound:
-      topos.append(pruned)
-      counts.append(1)
-  weights = [1.0*c/nCombos for c in counts]
-  return zip(topos,counts,weights)
+    if nIts >= nCombos:
+        comboGenerator = itertools.product(*taxa)
+        nIts = nCombos
+    else:
+        comboGenerator = randomComboGen(taxa)
+    if not topos:
+        topos = []
+    counts = [0]*len(topos)
+    total = 0
+    for iteration in xrange(nIts):
+        combo = comboGenerator.next()
+        pruned = tree.copy()
+        pruned.prune(combo)
+        #generify pruned tree
+        for leaf in pruned.iter_leaves():
+            leaf.name = taxonDict[leaf.name]
+        #check for matches with each topology
+        matchFound = False
+        for x in range(len(topos)):
+            if pruned.robinson_foulds(topos[x], unrooted_trees = unrooted)[0] == 0:
+                counts[x] += 1
+                matchFound = True
+                break
+        if not matchFound:
+            topos.append(pruned)
+            counts.append(1)
+        total += 1
+    weights = [1.0*c/total for c in counts]
+    return zip(topos,counts,weights)
+
+
+''' below is a bunch of code for a potentially much faster method.
+It first simplifies the tree, and weights each of the collapsed nodes
+accordingly, and then does the weighting as before, but taking node weights into account.
+It is super fast, and works well when trees are small, such that all combinations
+can be tested, but when only a subset of combos are tested it is unreliable.
+It seems to increase the variance dramatically, so in order to get a good result,
+you need to test far more combos, so the efficiency improvement goes away. I couldn't
+figure out if this makes sense, so I just dropped it for now.'''
+
+
+#def simplifyClade(tree, node):
+    ##will Collapse a node, but change its branch length to the mean of all decendents
+    ##get lengths to all decendents
+    #leaves = node.get_leaves()
+    #leafDists = [node.get_distance(leaf) for leaf in leaves]
+    #meanLeafDist = sum(leafDists)/len(leafDists)
+    ##now remove the children from this node
+    #for child in node.get_children():
+        #node.remove_child(child)
+    ##rename and add length
+    #node.name = leaves[0].name
+    #node.dist += meanLeafDist
+    #node.add_feature("weight", len(leaves))
+
+
+
+#def simplifyTree(tree,taxonDict):
+    #simpTree = tree.copy()
+    ##remove all leaves that are not in the taxonDict
+    #simpTree.prune(taxonDict.keys(), preserve_branch_length = True)
+    ##we will check all nodes for monophyly
+    #for node in simpTree.traverse("levelorder"):
+        ##print "Checking node", node.name
+        ##check if node is in tree (not sure if this is necessary)
+        #if node not in simpTree: # probably not a necessary line if traversing from top down
+            #continue
+        #leafNames = node.get_leaf_names()
+        ##print len(leafNames), "leaves:"
+        ##print leafNames
+        #if len(leafNames) >= 2:
+            #sameTaxon = True
+            ##get taxon of first node, and then ckeck others
+            #taxon = taxonDict[leafNames[0]]
+            #for leafName in leafNames[1:]:
+                #if taxonDict[leafName] != taxon:
+                    #sameTaxon = False
+                    #break
+            ##if all same taxon, get mean branch length and collapse
+            #if sameTaxon:
+                ##print "simplifying node."
+                #simplifyClade(simpTree, node)
+                ##print "new name:", node.name, "weight:", node.weight
+        #elif node.is_leaf():
+            #node.add_feature("weight", 1)
+    #return simpTree
+
+
+##new version that does the tree simplification
+#def weightTreeSimp(tree, taxa, taxonNames, nIts, topos = None, unrooted = True):
+    #taxonDict = {}
+    #for x in range(len(taxa)):
+        #for y in taxa[x]:
+            #taxonDict[y] = taxonNames[x]
+    
+    ##simplify the tree
+    #simpTree = simplifyTree(tree, taxonDict)
+    ##simpTree = tree.copy()
+    #leaves = simpTree.get_leaves()
+    #print "tree reduced to", len(leaves), "leaves"
+    #leafNames = [leaf.name for leaf in leaves]
+    #leafWeights = dict(zip(leafNames, [leaf.weight for leaf in leaves]))
+    ##leafWeights = dict(zip(leafNames, [1]*len(leaves)))
+    #simpTaxa = [[t for t in taxon if t in leafNames] for taxon in taxa]
+    ##we make a generator object for all combos
+    ##this cirmcumvents having to store all combos in memory
+    ##if there are more combos than Its, we need to make random samples
+    #nCombos = prod([len(t) for t in simpTaxa])
+    #print nCombos, "combos to test"
+    #if nIts >= nCombos:
+        #comboGenerator = itertools.product(*simpTaxa)
+        #nIts = nCombos
+        #print "will be testing all."
+    #else:
+        #comboGenerator = randomComboGen(simpTaxa)
+        #print "will be testing", nIts
+    
+    #if not topos:
+        #topos = []
+    
+    #counts = [0]*len(topos)
+    #total = 0
+    #for iteration in xrange(nIts):
+        #combo = comboGenerator.next()
+        #comboWeight = prod(leafWeights[leafName] for leafName in combo)
+        #pruned = simpTree.copy()
+        #pruned.prune(combo)
+        ##generify pruned tree
+        #for leaf in pruned.iter_leaves():
+            #leaf.name = taxonDict[leaf.name]
+        ##check for matches with each topology
+        #matchFound = False
+        #for x in range(len(topos)):
+            #if pruned.robinson_foulds(topos[x], unrooted_trees = unrooted)[0] == 0:
+                #counts[x] += comboWeight
+                #matchFound = True
+                #break
+        #if not matchFound:
+            #topos.append(pruned)
+            #counts.append(comboWeight)
+        #total += comboWeight
+    
+    #print "total weight of combos tested:", total
+    #weights = [1.0*c/total for c in counts]
+    #return zip(topos,counts,weights)
+
 
 def listToNwk(t):
   t = str(t)
@@ -119,6 +252,8 @@ def allTrees(branches, trees = []):
         #print "Tree still unresolved, so re-calling function."
         trees = allTrees(new_branches, trees)
   return(trees)
+
+
 
 ####################################################################################################################################
 
