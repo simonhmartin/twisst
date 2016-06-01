@@ -380,14 +380,14 @@ if __name__ == "__main__":
     if treeFileName[-3:] == ".gz": treeFile = gzip.open(treeFileName, "r")
     else: treeFile = open(treeFileName, "r")
 
-    line = treeFile.readline().rstrip()
+    line = treeFile.readline()
     
     ################################################################################################################################
 
     n = 0
 
-    while len(line) > 1:
-        tree = ete3.Tree(line)
+    while len(line) >= 1:
+        tree = ete3.Tree(line.rstrip())
         if method == "fixed":
             weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
         elif method == "threshold":

@@ -3,6 +3,7 @@ import argparse
 import sys
 import gzip
 import ete3
+import operator
 import twisst
 
 from multiprocessing import Process, Queue
@@ -12,6 +13,7 @@ from time import sleep
 
 ##############################################################################################################################
 
+def prod(iterable): return reduce(operator.mul, iterable, 1)
 
 '''A function that reads from the line queue, calls some other function and writes to the results queue
 This function needs to be tailored to the particular analysis funcion(s) you're using. This is the function that will run on each of the N cores.'''
@@ -170,6 +172,7 @@ if method == "fixed":
         print >> sys.stderr, "Warning: number of iterations is equal or greater than possible combinations.\n"
         nIts = prod([len(t) for t in taxa])
         print >> sys.stderr, "This could be very slow. Use method 'complete' for fast(er) exhaustive sampling."
+    thresholdDict = None
 elif method == "threshold":
     nIts = None
     assert args.thresholdTable, "A threshold table must be provided using argument --thresholdTable."
@@ -262,7 +265,7 @@ line = treeFile.readline().rstrip()
 
 ##########################################################################################################################################
 
-while len(line) > 1:
+while len(line) >= 1:
     lineQueue.put((linesQueued,line))
     linesQueued += 1
     line = treeFile.readline().rstrip()
