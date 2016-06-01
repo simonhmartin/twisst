@@ -260,16 +260,15 @@ worker.start()
 if treeFileName[-3:] == ".gz": treeFile = gzip.open(treeFileName, "r")
 else: treeFile = open(treeFileName, "r")
 
-line = treeFile.readline().rstrip()
+line = treeFile.readline()
 
 
 ##########################################################################################################################################
 
 while len(line) >= 1:
-    lineQueue.put((linesQueued,line))
+    lineQueue.put((linesQueued,line.rstrip()))
     linesQueued += 1
-    line = treeFile.readline().rstrip()
-  #line = treeFile.readline() # add second one if there are line breaks between trees
+    line = treeFile.readline()
 
 ############################################################################################################################################
 
