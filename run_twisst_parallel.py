@@ -20,8 +20,10 @@ This function needs to be tailored to the particular analysis funcion(s) you're 
 def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topos = None, getDists = False, method = "fixed", thresholdDict=None):
     while True:
         lineNumber,line = lineQueue.get()
-        try:
-            tree = ete3.Tree(line)
+        try: tree = ete3.Tree(line)
+        except: tree = None
+
+        if tree:
             if verbose: print >> sys.stderr, "Getting weights using method:", method
             if method == "fixed":
                 weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
@@ -29,19 +31,22 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topo
                 weightsData = twisst.weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
             elif method == "complete":
                 weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
-            weightsLine = ",".join([str(round(x,3)) for x in weightsData["weights"]])
+            weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
+
             if getDists:
                 dists_by_topo = []
                 for x in range(len(topos)):
-                    dists_by_topo.append(",".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]))
-                distsLine = ",".join(distsByTopo)
-            if verbose: print >> sys.stderr, "Analysed tree", lineNumber
-            result = [weightsLine]
-            if getDists: result.append(distsLine)
-        except:
-            result = ["NA"]
-            if getDists: result.append("NA")
+                    dists_by_topo.append("\t".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]))
+                distsLine = "\t".join(distsByTopo)    
+        else:
+            weightsLine="\t".join(["NA"]*len(topos))
+            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa, 2))))
+        
+        if verbose: print >> sys.stderr, "Analysed tree", lineNumber
+        result = [weightsLine]
+        if getDists: result.append(distsLine)
         resultQueue.put((lineNumber, tuple(result), True))
+        
 
 
 '''a function that watches the result queue and sorts results. This should be a generic funcion regardless of the result, as long as the first object is the line number, and this increases consecutively.'''
@@ -149,7 +154,7 @@ for topo in topos: print >> sys.stderr, topo
 #toposRooted = [topo.copy() for topo in topos]
 #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
-if agrs.topoFile:
+if args.topoFile:
     with open(topoFileName, "w") as topoFile:
         topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
 
@@ -182,7 +187,7 @@ else: weightsFile = open(args.weightsFile, "w")
 
 for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
-weightsFile.write(",".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
+weightsFile.write("\t".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
 
 outs = [weightsFile]
 
@@ -193,7 +198,7 @@ if getDists:
     if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
     else: distsFile = open(args.distsFile, "w")
     for x in range(len(topos)):
-        distsFile.write("topo" + str(x) + "_".join([pair for pair in itertools.combinations(taxonNames,2)]))
+        distsFile.write("\t".join(["topo" + str(x+1) + "_" + "_".join(pair) for pair in itertools.combinations(taxonNames,2)]) + "\t")
     distsFile.write("\n")
     outs += [distsFile]
 

@@ -42,7 +42,7 @@ def weightTree(tree, taxa, taxonNames, nIts, topos=None, getDists = False):
     if not topos: topos=allTrees(taxonNames, [])
     #unique id for each topo
     topoIDs = [t.get_topology_id() for t in topos]
-    counts = np.zeros(len(topos))
+    counts = np.zeros(len(topos), dtype=int)
     if getDists: dists = np.zeros([nTaxa, nTaxa, len(topos)])
     for iteration in xrange(nIts):
         combo = comboGenerator.next()
@@ -81,7 +81,7 @@ def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, topos=None, getDi
     if not topos: allTrees(taxonNames, [])
     #unique id for each topo
     topoIDs = [t.get_topology_id() for t in topos]
-    counts = np.zeros(len(topos))
+    counts = np.zeros(len(topos), dtype=int)
     if getDists: dists = np.zeros([nTaxa, nTaxa, len(topos)])
     total=0
     while True:
@@ -225,7 +225,7 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None):
     if not topos: allTrees(taxonNames, [])
     topoIDs = [t.get_topology_id() for t in topos]
     
-    counts = np.zeros(len(topos))
+    counts = np.zeros(len(topos), dtype=int)
     for combo in comboGenerator:
         comboWeight = prod(leafWeights[leafName] for leafName in combo)
         pruned = simpTree.copy("newick")
@@ -250,7 +250,7 @@ def listToNwk(t):
     return(t)
 
 def allTopos(branches, _topos=None, _topo_IDs=None):
-    if _topos is None:
+    if _topos is None or _topo_IDs is None:
         _topos = []
         _topo_IDs = set([])
     assert 4 <= len(branches) <= 8, "Please specify between 4 and 8 unique taxon names."
@@ -325,7 +325,7 @@ if __name__ == "__main__":
     assert min([len(t) for t in taxa]) >= 1, "Please specify at least one sample name per group."
 
     #get all topologies
-    topos = allTrees(taxonNames, [])
+    topos = allTopos(taxonNames, [])
     
     for topo in topos: print >> sys.stderr, topo
 
@@ -334,7 +334,7 @@ if __name__ == "__main__":
     #toposRooted = [topo.copy("newick") for topo in topos]
     #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
-    if agrs.topoFile:
+    if args.topoFile:
         with open(topoFileName, "w") as topoFile:
             topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
     
@@ -363,7 +363,7 @@ if __name__ == "__main__":
 
     for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
-    weightsFile.write(",".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
+    weightsFile.write("\t".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
 
     ### file for lengths
 
@@ -371,7 +371,7 @@ if __name__ == "__main__":
         if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
         else: distsFile = open(args.distsFile, "w")
         for x in range(len(topos)):
-            distsFile.write("topo" + str(x) + "_".join([pair for pair in itertools.combinations(taxonNames,2)]))
+            distsFile.write("\t".join(["topo" + str(x+1) + "_" + "_".join(pair) for pair in itertools.combinations(taxonNames,2)]) + "\t")
         distsFile.write("\n")
 
     ################################################################################################################################
@@ -388,19 +388,31 @@ if __name__ == "__main__":
     n = 0
 
     while len(line) >= 1:
-        tree = ete3.Tree(line.rstrip())
-        if method == "fixed":
-            weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
-        elif method == "threshold":
-            weightsData = weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
-        elif method == "complete":
-            weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
+
+        try: tree = ete3.Tree(line)
+        except: tree = None
         
-        weightsFile.write(",".join([str(round(x,3)) for x in weightsData["weights"]]) + "\n")
-        if getDists:
-            for x in range(len(topos)):
-                distsFile.write(",".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]) + ",")
-            distsFile.write("\n")
+        if tree:
+            if method == "fixed":
+                weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
+            elif method == "threshold":
+                weightsData = weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
+            elif method == "complete":
+                weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
+            weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
+
+            if getDists:
+                dists_by_topo = []
+                for x in range(len(topos)):
+                    dists_by_topo.append("\t".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]))
+                distsLine = "\t".join(distsByTopo)    
+        else:
+            weightsLine = "\t".join(["NA"]*len(topos))
+            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa, 2))))
+ 
+        weightsFile.write(weightsLine + "\n")
+        if getDists: distsFile.write(distsLine + "\n")
+
         print n
         n += 1
         line = treeFile.readline()
