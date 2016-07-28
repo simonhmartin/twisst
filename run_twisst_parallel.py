@@ -140,7 +140,7 @@ if args.groupsFile:
 assert min([len(t) for t in taxa]) >= 1, "Please specify at least one sample name per group."
 
 #get all topologies
-topos = twisst.allTrees(taxonNames, [])
+topos = twisst.allTopos(taxonNames, [])
 
 for topo in topos: print >> sys.stderr, topo
 
