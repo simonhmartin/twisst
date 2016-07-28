@@ -249,8 +249,12 @@ def listToNwk(t):
     t += ";"
     return(t)
 
-def allTrees(branches, trees = []):
+def allTopos(branches, _topos=None, _topo_IDs=None):
+    if _topos is None:
+        _topos = []
+        _topo_IDs = set([])
     assert 4 <= len(branches) <= 8, "Please specify between 4 and 8 unique taxon names."
+    #print "topos contains", len(_topos), "topologies."
     #print "current tree is:", branches 
     for x in range(len(branches)-1):
         for y in range(x+1,len(branches)):
@@ -259,15 +263,19 @@ def allTrees(branches, trees = []):
             new_branches[x] = [new_branches[x],new_branches.pop(y)]
             #print "New tree is:", new_branches
             if len(new_branches) == 3:
-                #print "Tree has three branches, so appending to trees."
-                #now check that the tree doesn't match a topology already in trees, and if not add it
-                tree = ete3.Tree(listToNwk(new_branches))
-                if len(trees) == 0 or min([tree.robinson_foulds(t, unrooted_trees = True)[0] for t in trees]) > 0:
-                    trees.append(tree)
+                #print "Tree has three branches, so appending to topos."
+                #now check that the topo doesn't match a topology already in trees, and if not add it
+                t = ete3.Tree(listToNwk(new_branches))
+                ID = t.get_topology_id()
+                if ID not in _topo_IDs:
+                    _topos.append(t)
+                    _topo_IDs.add(ID)
             else:
                 #print "Tree still unresolved, so re-calling function."
-                trees = allTrees(new_branches, trees)
-    return(trees)
+                _topos = allTopos(new_branches, _topos, _topo_IDs)
+    #print _topo_IDs
+    #print [t.write(format=9) for t in _topos]
+    return(_topos)
 
 
 #################################################################################################################################
@@ -277,9 +285,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store", required = True)
-    parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = True)
     parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store", required = True)
     parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
+    parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
     parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
     parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
     parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
@@ -291,14 +299,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     #args = parser.parse_args("-n 5 -t test.trees -o test.topos.txt -w test.weights.B.csv -g A a,b,c -g B d,e,f -g C g,h,i -g D j,k,l".split())
 
-    treeFileName = args.treeFile
-
-    topoFileName = args.topoFile
-
-    weightsFileName = args.weightsFile    
-
-    distsFileName = args.distsFile
-    if distsFileName: getDists = True
+    if args.distsFile: getDists = True
     else: getDists = False
 
     method = args.method
@@ -333,11 +334,9 @@ if __name__ == "__main__":
     #toposRooted = [topo.copy("newick") for topo in topos]
     #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
-    topoFile = open(topoFileName, "w")
-
-    topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
-
-    topoFile.close()
+    if agrs.topoFile:
+        with open(topoFileName, "w") as topoFile:
+            topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
     
     #################################################################################################################################
     
@@ -359,16 +358,18 @@ if __name__ == "__main__":
     #################################################################################################################################
     ### file for weights
 
-    if weightsFileName[-3:] == ".gz": weightsFile = gzip.open(weightsFileName, "w")
-    else: weightsFile = open(weightsFileName, "w")
+    if args.weightsFile[-3:] == ".gz": weightsFile = gzip.open(args.weightsFile, "w")
+    else: weightsFile = open(args.weightsFile, "w")
 
-    weightsFile.write(",".join(["topo" + str(x) for x in range(len(topos))]) + "\n")
+    for x in range(len(topos): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
+
+    weightsFile.write(",".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
 
     ### file for lengths
 
     if getDists:
-        if distsFileName[-3:] == ".gz": distsFile = gzip.open(distsFileName, "w")
-        else: distsFile = open(distsFileName, "w")
+        if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
+        else: distsFile = open(args.distsFile, "w")
         for x in range(len(topos)):
             distsFile.write("topo" + str(x) + "_".join([pair for pair in itertools.combinations(taxonNames,2)]))
         distsFile.write("\n")
@@ -377,8 +378,8 @@ if __name__ == "__main__":
 
     #open tree file
 
-    if treeFileName[-3:] == ".gz": treeFile = gzip.open(treeFileName, "r")
-    else: treeFile = open(treeFileName, "r")
+    if args.treeFile[-3:] == ".gz": treeFile = gzip.open(args.treeFile, "r")
+    else: treeFile = open(args.treeFile, "r")
 
     line = treeFile.readline()
     

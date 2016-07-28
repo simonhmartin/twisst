@@ -97,9 +97,9 @@ def checkStats():
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store", required = True)
-parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = True)
 parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store", required = True)
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
+parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
 parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
 parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
@@ -112,14 +112,7 @@ parser.add_argument("--verbose", help="Verbose output", action="store_true")
 args = parser.parse_args()
 #args = parser.parse_args("-n 5 -t test.trees -o test.topos.txt -w test.weights.B.csv -g A a,b,c -g B d,e,f -g C g,h,i -g D j,k,l".split())
 
-treeFileName = args.treeFile
-
-topoFileName = args.topoFile
-
-weightsFileName = args.weightsFile    
-
-distsFileName = args.distsFile
-if distsFileName: getDists = True
+if args.distsFile: getDists = True
 else: getDists = False
 
 method = args.method
@@ -156,11 +149,9 @@ for topo in topos: print >> sys.stderr, topo
 #toposRooted = [topo.copy() for topo in topos]
 #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
-topoFile = open(topoFileName, "w")
-
-topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
-
-topoFile.close()
+if agrs.topoFile:
+    with open(topoFileName, "w") as topoFile:
+        topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
 
 #################################################################################################################################
 
@@ -186,10 +177,12 @@ else:
 #################################################################################################################################
 ### file for weights
 
-if weightsFileName[-3:] == ".gz": weightsFile = gzip.open(weightsFileName, "w")
-else: weightsFile = open(weightsFileName, "w")
+if args.weightsFile[-3:] == ".gz": weightsFile = gzip.open(args.weightsFile, "w")
+else: weightsFile = open(args.weightsFile, "w")
 
-weightsFile.write(",".join(["topo" + str(x) for x in range(len(topos))]) + "\n")
+for x in range(len(topos): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
+
+weightsFile.write(",".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
 
 outs = [weightsFile]
 
@@ -197,8 +190,8 @@ outs = [weightsFile]
 ### file for lengths
 
 if getDists:
-    if distsFileName[-3:] == ".gz": distsFile = gzip.open(distsFileName, "w")
-    else: distsFile = open(distsFileName, "w")
+    if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
+    else: distsFile = open(args.distsFile, "w")
     for x in range(len(topos)):
         distsFile.write("topo" + str(x) + "_".join([pair for pair in itertools.combinations(taxonNames,2)]))
     distsFile.write("\n")
@@ -257,8 +250,8 @@ worker.start()
 
 #open tree file
 
-if treeFileName[-3:] == ".gz": treeFile = gzip.open(treeFileName, "r")
-else: treeFile = open(treeFileName, "r")
+if args.treeFile[-3:] == ".gz": treeFile = gzip.open(args.treeFile, "r")
+else: treeFile = open(args.treeFile, "r")
 
 line = treeFile.readline()
 
