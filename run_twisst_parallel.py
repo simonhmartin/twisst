@@ -180,7 +180,7 @@ else:
 if args.weightsFile[-3:] == ".gz": weightsFile = gzip.open(args.weightsFile, "w")
 else: weightsFile = open(args.weightsFile, "w")
 
-for x in range(len(topos): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
+for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
 weightsFile.write(",".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
 
