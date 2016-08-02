@@ -155,7 +155,7 @@ for topo in topos: print >> sys.stderr, topo
 #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
 if args.topoFile:
-    with open(topoFileName, "w") as topoFile:
+    with open(args.topoFile, "w") as topoFile:
         topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
 
 #################################################################################################################################
