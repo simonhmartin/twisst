@@ -118,9 +118,9 @@ The third option is `threshold`. This is similar to the sampling method above, e
 
 ###How to generate the trees file
 
-Where you get the trees from is up to you. If you have whole genome sequence data, it is recommended to infer trees for narrow genomic intervals. If the interval is too large, you may be averaging over regions of distinct ancestry, which can eliminate subtle quantitative variation in taxon relationships. However, if the interval is too small, you may have insufficient signal to infer a good tree. This can be determined by bootstrapping.
+There are various options for producing trees for windows across the genome. If you have whole genome sequence data, it is recommended to infer trees for narrow genomic intervals. 50 SNPs proved a useful window size in various simulations. If the window is too large, you may be averaging over regions of distinct ancestry, which can eliminate subtle quantitative variation in taxon relationships. However, if the interval is too small, you may have insufficient signal to infer a good tree.
 
-My approach is to subset the alignment into windows and infer trees for each separately, using either maximum likelihgood or neighbour joining methods. [PhyML](http://www.atgc-montpellier.fr/phyml/) can do both. [RAxML](http://sco.h-its.org/exelixis/web/software/raxml/) has an option to do the sliding windows automatically. However, you may want to infer breakpoints more intelligently, for example using [Saguaro](http://saguarogw.sourceforge.net/).
+My approach is to subset the alignment into windows and infer trees for each separately, using either maximum likelihgood or neighbour joining methods. [PhyML](http://www.atgc-montpellier.fr/phyml/) can do both. [RAxML](http://sco.h-its.org/exelixis/web/software/raxml/) has an option to do the sliding windows automatically. I don't recommend [Saguaro](http://saguarogw.sourceforge.net/) as it tends to be biased towards the most abundant topologies.
 
 
 
