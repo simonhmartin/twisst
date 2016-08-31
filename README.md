@@ -116,11 +116,52 @@ The default method is `fixed`. This estimates the weightings by randomly samplin
 
 The third option is `threshold`. This is similar to the sampling method above, except that the sampling is repeated until a certain dynamic threshold is reached. After *n* iterations, each topology must have been observed **fewer** than *k* times OR **more** than *n-k* times, with combinations of *n* and *k* being specified by the user. This allows specification of a unique threshold dependng on the number of iterations (*n*) and the number of observations (*k*). For example, you can set the thresholds such that the 95% binomial confidence interval around each weighting is less than 5%. Thresholds must be specified in a file, using the flag `--thresholdTable`. The file gives iterations (*n*) in the first column and the threshold number of observations (*k*) in the second column. If tyhe particular *n* has no acceptible *k* (often the case for low *n*), then *k* of -1 can be specified. Two example threshold tables are provided. These give thresholds to ensure that the 95% CI (Calculated using the "Wilson" method) is less than 5% or 10%.
 
-###How to generate the trees file
+###Pipeline to generate the input trees file
 
 There are various options for producing trees for windows across the genome. If you have whole genome sequence data, it is recommended to infer trees for narrow genomic intervals. 50 SNPs proved a useful window size in various simulations. If the window is too large, you may be averaging over regions of distinct ancestry, which can eliminate subtle quantitative variation in taxon relationships. However, if the interval is too small, you may have insufficient signal to infer a good tree.
 
 My approach is to subset the alignment into windows and infer trees for each separately, using either maximum likelihgood or neighbour joining methods. [PhyML](http://www.atgc-montpellier.fr/phyml/) can do both. [RAxML](http://sco.h-its.org/exelixis/web/software/raxml/) has an option to do the sliding windows automatically. I don't recommend [Saguaro](http://saguarogw.sourceforge.net/) as it tends to be biased towards the most abundant topologies.
+
+#### My pipeline from BAM to trees
+
+* Starting with bam files, I genotype with [GATK](https://software.broadinstitute.org/gatk/), using the `HaplotypeCaller` and `GenotypeGVCFs` tools. Here are example commands:
+```bash
+#HaplotypeCaller
+java -jar GenomeAnalysisTK.jar -T HaplotypeCaller -nct 16 -R reference.fa -I input.bam -o output.g.vcf --emitRefConfidence GVCF --output_mode EMIT_ALL_CONFIDENT_SITES
+#GenotypeGVCFs
+java -jar GenomeAnalysisTK.jar -T GenotypeGVCFs -nt 16 -R reference.fa -V output.g.vcf --includeNonVariantSites -o output.vcf
+```
+
+* I filter vcfs using [Bcftools](https://samtools.github.io/bcftools/). This allows you to remove indels and invariant sites. I also like to convert uncertain genotypes to missing (`./.`) before phasing. Here is an example command that will convert all genotypes with < 5x depth of coverage and GQ < 30 to missing.
+```bash
+bcftools filter -e 'FORMAT/DP < 5 | FORMAT/GQ < 30' --set-GTs . input.vcf.gz -O u | bcftools view -U -i 'TYPE=="snp" & MAC >= 2' -O z > output.vcf.gz
+``` 
+
+* For diploids, I infer phase using [Beagle 4](https://faculty.washington.edu/browning/beagle/beagle.html), although I plan to start using [SHAPEIT](https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html). Here is an example Beagle command:
+
+```bash
+java -Xmx12g -jar beagle.jar gt=input.vcf.gz out=output.vcf.gz impute=true nthreads=20 window=10000 overlap=1000 gprobs=false
+```
+
+* My script to generate the trees takes a simple genotype format as input, which gives the scaffold, position and genotype for each sample. My code to generate this file from a vcf is in my repo [genomics_general](https://github.com/simonhmartin/genomics_general). Here is an example command:
+
+```bash
+python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 > output.geno.gz
+```
+
+* To get neighbour joining trees for snp windows, I have a script that runs [Phyml](http://www.atgc-montpellier.fr/phyml/) for windows, using parallelisation, and outputs a single trees file. You can get the script from my [genomics_general](https://github.com/simonhmartin/genomics_general) repo. Here is an example command:
+```bash
+python phyml_sliding_windows.py -T 10 -g input.phased.geno.gz --prefix output.phyml_bionj.w50 -w 50 --windType sites --model GTR --genoFormat phased
+```
+
+
+
+
+
+
+
+
+
 
 
 
