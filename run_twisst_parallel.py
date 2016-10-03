@@ -103,8 +103,8 @@ def checkStats():
 ############################################################################################################################################
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store", required = True)
-parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store", required = True)
+parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store")
+parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
 parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
@@ -184,8 +184,9 @@ else:
 #################################################################################################################################
 ### file for weights
 
-if args.weightsFile[-3:] == ".gz": weightsFile = gzip.open(args.weightsFile, "w")
-else: weightsFile = open(args.weightsFile, "w")
+if args.weightsFile:
+    weightsFile = gzip.open(args.weightsFile, "w") if args.weightsFile.endswith(".gz") else open(args.weightsFile, "w")
+else: weightsFile = sys.stdout
 
 for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
@@ -257,8 +258,9 @@ worker.start()
 
 #open tree file
 
-if args.treeFile[-3:] == ".gz": treeFile = gzip.open(args.treeFile, "r")
-else: treeFile = open(args.treeFile, "r")
+if args.treeFile:
+    treeFile = gzip.open(args.treeFile, "r") if args.treeFile.ends with(".gz") else open(args.treeFile, "r")
+else: treeFile = sys.stdin
 
 line = treeFile.readline()
 
