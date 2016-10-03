@@ -21,7 +21,16 @@ def sample(things, n = None, replace = False):
 def randomComboGen(lists):
     while True: yield tuple(random.choice(l) for l in lists)
 
-
+def getPrunedCopy(tree, leavesToKeep, preserve_branch_length):
+    pruned = tree.copy("newick")
+    ##prune function was too slow for big trees
+    ## speeding up by first deleting all oter leaves
+    for leaf in pruned.iter_leaves():
+        if leaf.name not in leavesToKeep: leaf.delete(preserve_branch_length=preserve_branch_length)
+    #and then prune to fix the root (not sure why this is necessary, but it is)
+    #but at least it's faster than pruning the full tree
+    pruned.prune(leavesToKeep, preserve_branch_length = preserve_branch_length)
+    return pruned
 
 #new version that does not do simplification, but has a few improvements
 def weightTree(tree, taxa, taxonNames, nIts, topos=None, getDists = False):
@@ -30,8 +39,6 @@ def weightTree(tree, taxa, taxonNames, nIts, topos=None, getDists = False):
     for x in range(nTaxa):
         for y in taxa[x]:
             taxonDict[y] = taxonNames[x]
-    leaves = tree.get_leaves()
-    leafNames = [leaf.name for leaf in leaves]
     #we make a generator object for all combos
     #if there are more combos than Its, we need to make random samples
     nCombos = prod([len(t) for t in taxa])
@@ -46,12 +53,13 @@ def weightTree(tree, taxa, taxonNames, nIts, topos=None, getDists = False):
     if getDists: dists = np.zeros([nTaxa, nTaxa, len(topos)])
     for iteration in xrange(nIts):
         combo = comboGenerator.next()
-        pruned = tree.copy("newick")
-        pruned.prune(combo, preserve_branch_length = getDists)
-        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
+        pruned = getPrunedCopy(tree, combo, preserve_branch_length = getDists)
         pruned.unroot()
+        #rename leaves
+        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
         #get pairwise dists if necessary
-        if getDists: 
+        if getDists:
+            print "getting dists"
             currentDists = np.zeros([nTaxa,nTaxa])
             for pair in itertools.combinations(range(nTaxa), 2):
                 currentDists[pair[0],pair[1]] = currentDists[pair[1],pair[0]] = pruned.get_distance(taxonNames[pair[0]], taxonNames[pair[1]])
@@ -74,8 +82,6 @@ def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, topos=None, getDi
     for x in range(nTaxa):
         for y in taxa[x]:
             taxonDict[y] = taxonNames[x]
-    leaves = tree.get_leaves()
-    leafNames = [leaf.name for leaf in leaves]
     #make random combinations for sampling
     comboGenerator = randomComboGen(taxa)
     if not topos: allTrees(taxonNames, [])
@@ -86,10 +92,9 @@ def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, topos=None, getDi
     total=0
     while True:
         combo = comboGenerator.next()
-        pruned = tree.copy("newick")
-        pruned.prune(combo, preserve_branch_length = getDists)
-        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
+        pruned = getPrunedCopy(tree, combo, preserve_branch_length = getDists)
         pruned.unroot()
+        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
         #get pairwise dists if necessary
         if getDists: 
             currentDists = np.zeros([nTaxa,nTaxa])
@@ -118,8 +123,6 @@ def weightTreeEachIter(tree, taxa, taxonNames, nIts, topos):
     for x in range(nTaxa):
         for y in taxa[x]:
             taxonDict[y] = taxonNames[x]
-    leaves = tree.get_leaves()
-    leafNames = [leaf.name for leaf in leaves]
     #we make a generator object for all combos
     #if there are more combos than Its, we need to make random samples
     nCombos = prod([len(t) for t in taxa])
@@ -133,10 +136,9 @@ def weightTreeEachIter(tree, taxa, taxonNames, nIts, topos):
     counts = np.zeros([len(topos), nIts])
     for i in xrange(nIts):
         combo = comboGenerator.next()
-        pruned = tree.copy("newick")
-        pruned.prune(combo, preserve_branch_length = False)
-        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
+        pruned = getPrunedCopy(tree, combo, preserve_branch_length = getDists)
         pruned.unroot()
+        for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
         #check for topology match
         prunedID = pruned.get_topology_id()
         x = topoIDs.index(prunedID)
@@ -228,11 +230,10 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None):
     counts = np.zeros(len(topos), dtype=int)
     for combo in comboGenerator:
         comboWeight = prod(leafWeights[leafName] for leafName in combo)
-        pruned = simpTree.copy("newick")
-        pruned.prune(combo)
+        pruned = getPrunedCopy(tree, combo, preserve_branch_length = False)
+        pruned.unroot()
         #generify pruned tree
         for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
-        pruned.unroot()
         #check for topology match
         prunedID = pruned.get_topology_id()
         x = topoIDs.index(prunedID)
@@ -322,6 +323,8 @@ if __name__ == "__main__":
             try: taxa[taxonNames.index(groupDict[sample])].append(sample)
             except: pass
     
+    nTaxa=len(taxa)
+    
     assert min([len(t) for t in taxa]) >= 1, "Please specify at least one sample name per group."
 
     #get all topologies
@@ -400,20 +403,20 @@ if __name__ == "__main__":
             elif method == "complete":
                 weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
-
+        
             if getDists:
-                dists_by_topo = []
+                distsByTopo = []
                 for x in range(len(topos)):
-                    dists_by_topo.append("\t".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]))
+                    distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(ntaxa), 2)]))
                 distsLine = "\t".join(distsByTopo)    
         else:
             weightsLine = "\t".join(["NA"]*len(topos))
-            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa, 2))))
- 
+            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa), 2)))
+        
         weightsFile.write(weightsLine + "\n")
         if getDists: distsFile.write(distsLine + "\n")
-
-        print n
+        
+        print >> sys.stderr, n
         n += 1
         line = treeFile.readline()
 
