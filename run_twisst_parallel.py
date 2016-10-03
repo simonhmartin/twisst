@@ -5,6 +5,7 @@ import gzip
 import ete3
 import operator
 import twisst
+import itertools
 
 from multiprocessing import Process, Queue
 from multiprocessing.queues import SimpleQueue
@@ -18,6 +19,7 @@ def prod(iterable): return reduce(operator.mul, iterable, 1)
 '''A function that reads from the line queue, calls some other function and writes to the results queue
 This function needs to be tailored to the particular analysis funcion(s) you're using. This is the function that will run on each of the N cores.'''
 def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topos = None, getDists = False, method = "fixed", thresholdDict=None):
+    nTaxa=len(taxa)
     while True:
         lineNumber,line = lineQueue.get()
         try: tree = ete3.Tree(line)
@@ -34,13 +36,13 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topo
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
 
             if getDists:
-                dists_by_topo = []
+                distsByTopo = []
                 for x in range(len(topos)):
-                    dists_by_topo.append("\t".join([str(weightsData["dists"][pair[0],pair[1]]) for pair in itertools.combinations(range(nTaxa, 2))]))
-                distsLine = "\t".join(distsByTopo)    
+                    distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(nTaxa), 2)]))
+                distsLine = "\t".join(distsByTopo)
         else:
             weightsLine="\t".join(["NA"]*len(topos))
-            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa, 2))))
+            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa), 2)))
         
         if verbose: print >> sys.stderr, "Analysed tree", lineNumber
         result = [weightsLine]
