@@ -18,7 +18,8 @@ def prod(iterable): return reduce(operator.mul, iterable, 1)
 
 '''A function that reads from the line queue, calls some other function and writes to the results queue
 This function needs to be tailored to the particular analysis funcion(s) you're using. This is the function that will run on each of the N cores.'''
-def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topos = None, getDists = False, method = "fixed", thresholdDict=None):
+def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, outgroup, nIts=None,
+                       topos = None, getDists = False, method = "fixed", thresholdDict=None):
     nTaxa=len(taxa)
     while True:
         lineNumber,line = lineQueue.get()
@@ -26,6 +27,14 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, nIts=None, topo
         except: tree = None
 
         if tree:
+            #clean off unneccesary branches - speeds up downstream analyses
+            leafNamesSet = set([leaf.name for leaf in tree.get_leaves()])
+            if namesSet != leafNamesSet:
+                assert namesSet.issubset(leafNamesSet), "Named samples not present in tree."
+                tree = twisst.getPrunedCopy(tree, leavesToKeep=names, preserve_branch_length=True)
+            
+            if outgroup is not None: tree.set_outgroup(outgroup)
+            
             if verbose: print >> sys.stderr, "Getting weights using method:", method
             if method == "fixed":
                 weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
@@ -107,6 +116,7 @@ parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse
 parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
 parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
+parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
 parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
 parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
@@ -145,6 +155,11 @@ if args.groupsFile:
         except: pass
 
 assert min([len(t) for t in taxa]) >= 1, "Please specify at least one sample name per group."
+
+
+names = [t for taxon in taxa for t in taxon]
+namesSet = set(names)
+assert len(names) == len(namesSet), "Each sample should only be in one group."
 
 #get all topologies
 topos = twisst.allTopos(taxonNames, [])
@@ -229,7 +244,7 @@ writeQueue = SimpleQueue()
 of course these will only start doing anything after we put data into the line queue
 the function we call is actually a wrapper for another function.(s) This one reads from the line queue, passes to some analysis function(s), gets the results and sends to the result queue'''
 for x in range(threads):
-    worker = Process(target=weightTree_wrapper, args = (lineQueue, resultQueue, taxa, taxonNames,
+    worker = Process(target=weightTree_wrapper, args = (lineQueue, resultQueue, taxa, taxonNames, args.outgroup,
                                                         nIts, topos, getDists, method,thresholdDict,))
     worker.daemon = True
     worker.start()
@@ -259,7 +274,7 @@ worker.start()
 #open tree file
 
 if args.treeFile:
-    treeFile = gzip.open(args.treeFile, "r") if args.treeFile.ends with(".gz") else open(args.treeFile, "r")
+    treeFile = gzip.open(args.treeFile, "r") if args.treeFile.endswith(".gz") else open(args.treeFile, "r")
 else: treeFile = sys.stdin
 
 line = treeFile.readline()

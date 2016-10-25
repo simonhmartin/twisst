@@ -9,6 +9,8 @@ import random
 import numpy as np
 
 np.seterr(divide='ignore', invalid="ignore")
+
+verbose = False
 ##############################################################################################################################
 
 def prod(iterable): return reduce(operator.mul, iterable, 1)
@@ -31,6 +33,8 @@ def getPrunedCopy(tree, leavesToKeep, preserve_branch_length):
     #but at least it's faster than pruning the full tree
     pruned.prune(leavesToKeep, preserve_branch_length = preserve_branch_length)
     return pruned
+
+def isRooted(tree): return len(tree.get_children()) == 2
 
 #new version that does not do simplification, but has a few improvements
 def weightTree(tree, taxa, taxonNames, nIts, topos=None, getDists = False):
@@ -173,8 +177,6 @@ def simplifyClade(tree, node):
     node.dist += meanLeafDist
     node.add_feature("weight", len(leaves))
 
-
-
 def simplifyTree(tree,taxonDict):
     simpTree = tree.copy("newick")
     #remove all leaves that are not in the taxonDict
@@ -203,11 +205,79 @@ def simplifyTree(tree,taxonDict):
                 #print "new name:", node.name, "weight:", node.weight
         elif node.is_leaf():
             node.add_feature("weight", 1)
+    #now we can do a second and third step.
+    #Working up from tips, we remove any redundant twigs and transfer their weight
+    #I have not yet built branch length preservation into this
+    
+    #We aslo check whether each node has twin pairs below it.
+    #if so, we remove one and pass weights to the other.
+    #this all gets run over and over until no new changes are made
+    changed = True
+    while changed:
+        changed = False
+        for node in simpTree.traverse("postorder"):
+            cdn0 = node.get_children()
+            if len(cdn0) == 2:
+                if cdn0[0].is_leaf():
+                    #print "testing", cdn0[0].name
+                    cdn1 = cdn0[1].get_children()
+                    if len(cdn1) == 2:
+                        if cdn1[0].is_leaf() and taxonDict[cdn0[0].name] == taxonDict[cdn1[0].name]:
+                            #print "removing", cdn1[0].name
+                            cdn0[0].weight += cdn1[0].weight
+                            cdn1[0].delete(preserve_branch_length=False)
+                            changed = True
+                        elif cdn1[1].is_leaf() and taxonDict[cdn0[0].name] == taxonDict[cdn1[1].name]:
+                            #print "removing", cdn1[1].name
+                            cdn0[0].weight += cdn1[1].weight
+                            cdn1[1].delete(preserve_branch_length=False)
+                            changed = True
+                elif cdn0[1].is_leaf():
+                    #print "testing", cdn0[1].name
+                    cdn1 = cdn0[0].get_children()
+                    if len(cdn1) == 2:
+                        if cdn1[0].is_leaf() and taxonDict[cdn0[1].name] == taxonDict[cdn1[0].name]:
+                            #print "removing", cdn1[0].name
+                            cdn0[1].weight += cdn1[0].weight
+                            cdn1[0].delete(preserve_branch_length=False)
+                            changed = True
+                        elif cdn1[1].is_leaf() and taxonDict[cdn0[1].name] == taxonDict[cdn1[1].name]:
+                            #print "removing", cdn1[1].name
+                            cdn0[1].weight += cdn1[1].weight
+                            cdn1[1].delete(preserve_branch_length=False)
+                            changed = True
+                #if we get here the pair are both not leaves, but we can check if they're twins
+                #This code only simplifies pair twins, but in theory all twins could be simplified
+                #Like the methods above, I haven't written this to preserve dist info, but that should be doable'''
+                elif len(node.get_leaves()) == 4:
+                    #print "Checking for twins"
+                    lvsA,lvsB = [child.get_leaves() for child in cdn0]
+                    if len(lvsA) == len(lvsB) == 2:
+                        taxaA = [taxonDict[lf.name] for lf in lvsA]
+                        taxaB = [taxonDict[lf.name] for lf in lvsB]
+                        if taxaA == taxaB:
+                            #print "removing", lvsB[0].name, "and", lvsB[1].name 
+                            lvsA[0].weight += lvsB[0].weight
+                            lvsA[1].weight += lvsB[1].weight
+                            lvsB[0].delete()
+                            lvsB[1].delete()
+                            cdn0[1].delete()
+                            changed = True
+                        elif taxaA[0] == taxaB[1] and taxaA[1] == taxaB[0]:
+                            #print "removing", lvsB[1].name, "and", lvsB[0].name 
+                            lvsA[0].weight += lvsB[1].weight
+                            lvsA[1].weight += lvsB[0].weight
+                            lvsB[0].delete()
+                            lvsB[1].delete()
+                            cdn0[1].delete()
+                            changed = True
+    
     return simpTree
 
 
 #new version that does the tree simplification
 def weightTreeSimp(tree, taxa, taxonNames, topos = None):
+    assert isRooted(tree), "Tree must be rooted"
     taxonDict = {}
     for x in range(len(taxa)):
         for y in taxa[x]:
@@ -215,13 +285,16 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None):
     
     #simplify the tree
     simpTree = simplifyTree(tree, taxonDict)
+    if verbose: print >> sys.stderr, simpTree
     leaves = simpTree.get_leaves()
+    if verbose: print >> sys.stderr, "Simplified tree has", len(leaves), "leaves."
     leafNames = [leaf.name for leaf in leaves]
     leafWeights = dict(zip(leafNames, [leaf.weight for leaf in leaves]))
     #leafWeights = dict(zip(leafNames, [1]*len(leaves)))
     simpTaxa = [[t for t in taxon if t in leafNames] for taxon in taxa]
     #we make a generator object for all combos
     nCombos = prod([len(t) for t in simpTaxa])
+    if verbose: print >> sys.stderr, "There are", nCombos, "combinations to test."
     comboGenerator = itertools.product(*simpTaxa)
 
     if not topos: allTrees(taxonNames, [])
@@ -289,6 +362,7 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
     parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
     parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
+    parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
     parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
     parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
     parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
@@ -326,7 +400,11 @@ if __name__ == "__main__":
     nTaxa=len(taxa)
     
     assert min([len(t) for t in taxa]) >= 1, "Please specify at least one sample name per group."
-
+    
+    names = [t for taxon in taxa for t in taxon]
+    namesSet = set(names)
+    assert len(names) == len(namesSet), "Each sample should only be in one group."
+    
     #get all topologies
     topos = allTopos(taxonNames, [])
     
@@ -383,7 +461,7 @@ if __name__ == "__main__":
     #open tree file
     
     if args.treeFile:
-        treeFile = gzip.open(args.treeFile, "r") if args.treeFile.ends with(".gz") else open(args.treeFile, "r")
+        treeFile = gzip.open(args.treeFile, "r") if args.treeFile.endswith(".gz") else open(args.treeFile, "r")
     else: treeFile = sys.stdin
 
     line = treeFile.readline()
@@ -398,6 +476,15 @@ if __name__ == "__main__":
         except: tree = None
         
         if tree:
+            #remove unneccesary leaves (speeds up downstream steps)
+            leafNamesSet = set([leaf.name for leaf in tree.get_leaves()])
+            if namesSet != leafNamesSet:
+                assert namesSet.issubset(leafNamesSet), "Named samples not present in tree."
+                tree = getPrunedCopy(tree, leavesToKeep=names, preserve_branch_length=True)
+            
+            #root if necessary
+            if args.outgroup: tree.set_outgroup(args.outgroup)
+            
             if method == "fixed":
                 weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
             elif method == "threshold":
