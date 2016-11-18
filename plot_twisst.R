@@ -33,7 +33,7 @@ interleave <- function(x1,x2){
 
 
 plot_weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_cols=NULL,xlim=NULL,ylim=c(0,1),stacked=FALSE,
-                                        xlab="Weights", ylab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n"){
+                                        ylab="Weights", xlab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n"){
     #get x axis
     x = positions
     #if a two-column matrix is given - plot step-like weights with start and end of each window    
@@ -74,7 +74,7 @@ options(scipen = 5)
 ########### input data ################
 
 #weights file with a column for each topology
-weights_file <- "examples/msms_4of10_l1Mb_r10k.seq_gen.SNP.w50sites.phyml_bionj.weights.tsv.gz"
+weights_file <- "examples/msms_4of10_l1Mb_r10k.seq_gen.SNP.w50sites.phyml_bionj.weights.tsv"
 
 #coordinates file for each window
 window_data_file <- "examples/msms_4of10_l1Mb_r10k.seq_gen.SNP.w50sites.phyml_bionj.data.tsv"
@@ -92,7 +92,7 @@ window_data = read.table(window_data_file, header = T)
 #exclude any rows where data is missing
 good_rows = which(is.na(apply(weights,1,sum)) == F)
 weights <- weights[good_rows,]
-coordinates = coordinates[good_rows,]
+window_data = window_data[good_rows,]
 
 
 ########### choose colours for plot ########
@@ -131,22 +131,25 @@ trans_cols = paste0(cols, "25")
 
 ######### plot raw data #######
 
-#stepped stacked
-pdf(file = paste0("examples/example.raw.stepped.stacked.pdf"), width = 10, height = 6)
+#plot raw data in "stepped" style, with polygons stacked.
+#specify stepped style by providing a matrix of starts and ends for positions
+pdf(file = paste0("examples/example.raw.stepped.stacked.pdf"), width = 10, height = 4)
 par(mar = c(4,4,1,1))
 plot_weights(weights_dataframe=weights, positions=cbind(window_data$start,window_data$end),
              line_cols=cols, fill_cols=cols, xlim =c(1,100000),stacked=TRUE)
 dev.off()
 
-# stepped unstacked
-pdf(file = paste0("examples/example.raw.stepped.unstacked.pdf"), width = 10, height = 6)
+#plot raw data in stepped style, with polygons unstacked (stacked =FLASE)
+#use semi-transparent colours for fill
+pdf(file = paste0("examples/example.raw.stepped.unstacked.pdf"), width = 10, height = 4)
 par(mar = c(4,4,1,1))
 plot_weights(weights_dataframe=weights, positions=cbind(window_data$start,window_data$end),
              line_cols=cols, fill_cols=trans_cols, xlim =c(1,100000),stacked=FALSE)
 dev.off()
 
-#midpoints unstacked
-pdf(file = paste0("examples/example.raw.midpoints.unstacked.pdf"), width = 10, height = 6)
+#plot raw data against window midpoints, with polygons unstacked.
+#specify midpoint style by providing a single vector of midpoints for positions
+pdf(file = paste0("examples/example.raw.midpoints.unstacked.pdf"), width = 10, height = 4)
 par(mar = c(4,4,1,1))
 plot_weights(weights_dataframe=weights, positions=window_data$mid,
              line_cols=cols, fill_cols=trans_cols, xlim =c(1,100000),stacked=FALSE)
@@ -160,14 +163,16 @@ weights_smooth <- smooth_df(x=window_data$mid,weights,col.names=topoNames,span=s
 weights_smooth <- weights_smooth / apply(weights_smooth, 1, sum)
 
 
-pdf(file = paste0("examples/example.smooth.stacked.pdf"), width = 10, height = 6)
+
+#plot smoothed data with polygons stacked
+pdf(file = paste0("examples/example.smooth.stacked.pdf"), width = 10, height = 4)
 par(mar = c(4,4,1,1))
 plot_weights(weights_dataframe=weights_smooth, positions=window_data$mid,
              line_cols=cols, fill_cols=cols, xlim =c(1,100000),stacked=TRUE)
 dev.off()
 
-
-pdf(file = paste0("examples/example.smooth.unstacked.pdf"), width = 10, height = 6)
+#plot smoothed data with polygons unstacked
+pdf(file = paste0("examples/example.smooth.unstacked.pdf"), width = 10, height = 4)
 par(mar = c(4,4,1,1))
 plot_weights(weights_dataframe=weights_smooth, positions=window_data$mid,
              line_cols=cols, fill_cols=trans_cols, xlim =c(1,100000),stacked=FALSE)
