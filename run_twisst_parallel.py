@@ -36,12 +36,18 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, outgroup, nIts=
             if outgroup is not None: tree.set_outgroup(outgroup)
             
             if verbose: print >> sys.stderr, "Getting weights using method:", method
-            if method == "fixed":
+
+            weightsData = None
+            
+            if method == "complete":
+                weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
+            
+            if method == "fixed" or (backupMethod == "fixed" and weightsData == None):
                 weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
-            elif method == "threshold":
+            
+            if method == "threshold" or (backupMethod == "threshold" and weightsData == None):
                 weightsData = twisst.weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
-            elif method == "complete":
-                weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
+
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
 
             if getDists:
@@ -118,7 +124,9 @@ parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dist
 parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
 parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
+parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
 parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
+parser.add_argument("--abortCutoff", help="# tips in simplified tree to abort 'complete' weighting", type=int, action = "store", default = 100000)
 parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
 parser.add_argument("-g", "--group", help="Group name and individual names (separated by commas)", action='append', nargs="+", required = True, metavar=("name","[inds]"))
 parser.add_argument("--groupsFile", help="Optional file of sample names and groups", action = "store", required = False)
@@ -133,7 +141,7 @@ if args.distsFile: getDists = True
 else: getDists = False
 
 method = args.method
-
+backupMethod = args.backupMethod
 threads = args.threads
 
 verbose = args.verbose
@@ -179,14 +187,14 @@ if args.topoFile:
 
 # check method
 
-if method == "fixed":
+if method == "fixed" or (method == "complete" and backupMethod == "fixed"):
     nIts = args.iterations
     if nIts >= prod([len(t) for t in taxa]):
         print >> sys.stderr, "Warning: number of iterations is equal or greater than possible combinations.\n"
         nIts = prod([len(t) for t in taxa])
         print >> sys.stderr, "This could be very slow. Use method 'complete' for fast(er) exhaustive sampling."
     thresholdDict = None
-elif method == "threshold":
+elif method == "threshold" or (method == "complete" and backupMethod == "threshold"):
     nIts = None
     assert args.thresholdTable, "A threshold table must be provided using argument --thresholdTable."
     thresholdTableFileName = args.thresholdTable
@@ -195,7 +203,6 @@ elif method == "threshold":
 else:
     nIts = None
     thresholdDict = None
-
 #################################################################################################################################
 ### file for weights
 
