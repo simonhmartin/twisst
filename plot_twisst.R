@@ -33,7 +33,7 @@ interleave <- function(x1,x2){
 
 
 plot_weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_cols=NULL,xlim=NULL,ylim=c(0,1),stacked=FALSE,
-                                        ylab="Weights", xlab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n"){
+                                        ylab="Weights", xlab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n", add=FALSE){
     #get x axis
     x = positions
     #if a two-column matrix is given - plot step-like weights with start and end of each window    
@@ -50,13 +50,14 @@ plot_weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_co
     #set x limits
     if(is.null(xlim)) xlim = c(min(x), max(x))
     
-    plot(0, pch = "", xlim = xlim, ylim=ylim, ylab=ylab, xlab=xlab, main=main,xaxt=xaxt,yaxt=yaxt,bty=bty)
+    #if not adding to an old plot, make a new plot
+    if (add==FALSE) plot(0, pch = "", xlim = xlim, ylim=ylim, ylab=ylab, xlab=xlab, main=main,xaxt=xaxt,yaxt=yaxt,bty=bty)
     
     if (stacked == TRUE){
-        stacked <- stack(weights_dataframe)
+        y_stacked <- stack(weights_dataframe)
         for (n in 1:ncol(weights_dataframe)){
-            y_upper = rep(stacked[["upper"]][,n],each=yreps)
-            y_lower = rep(stacked[["lower"]][,n],each = yreps)
+            y_upper = rep(y_stacked[["upper"]][,n],each=yreps)
+            y_lower = rep(y_stacked[["lower"]][,n],each = yreps)
             polygon(c(x,rev(x)),c(y_upper, rev(y_lower)), col = fill_cols[n], border=NA)
             }
         }
