@@ -163,25 +163,25 @@ you need to test far more combos, so the efficiency improvement goes away. I cou
 figure out if this makes sense, so I just dropped it for now.'''
 
 
-def simplifyClade(node):
+def simplifyClade(node,preserve_branch_length=True):
     #will Collapse a node, but change its branch length to the mean of all decendents
     #get lengths to all decendents
     leaves = node.get_leaves()
-    leafDists = [1.*node.get_distance(leaf) for leaf in leaves]
-    meanLeafDist = sum(leafDists)/len(leafDists)
+    if preserve_branch_length:
+        leafDists = [1.*node.get_distance(leaf) for leaf in leaves]
+        meanLeafDist = sum(leafDists)/len(leafDists)
     #now remove the children from this node
-    for child in node.get_children():
-        node.remove_child(child)
+    for child in node.get_children(): node.remove_child(child)
     #rename and add length
     node.name = leaves[0].name
-    node.dist += meanLeafDist
+    if preserve_branch_length: node.dist += meanLeafDist
     node.add_feature("weight", len(leaves))
 
 '''If a leaf's nearest outgroup is a leaf from the same taxon, the inner leaf can be removed.
 Example in the tree (C1,(B1,(B2,A1))); B2 can be removed, because A1's closest relative will stlill be from taxon B.
 We remove B2, and correct branch lengths by moving the base downward (ie increase their  base), moving A1 upward,
 and giving B1 the average length of B1 and B2.'''
-def removeInnerLeaf(base, outerLeaf, innerNode, innerLeaf):
+def removeInnerLeaf(base, outerLeaf, innerNode, innerLeaf,preserve_branch_length=True):
     #correct lengths
     relativeWeight = 1.*innerLeaf.weight/(innerLeaf.weight+outerLeaf.weight)
     base.dist += innerNode.dist * relativeWeight
@@ -190,44 +190,30 @@ def removeInnerLeaf(base, outerLeaf, innerNode, innerLeaf):
     #transfer weight
     outerLeaf.weight += innerLeaf.weight
     #delete
-    innerLeaf.delete(preserve_branch_length=True)
+    innerLeaf.delete(preserve_branch_length=preserve_branch_length)
 
 '''If a pair of nodes both have two children, and those children are in the same taxa, then the nodes are twins.
 We can remove one (along with it's children) after transfering the weights and averaging the lengths'''
 
 '''I COULD NOT GET THIS STEP TO GIVE CORRECT DISTS - SO I GAVE UP'''
 
-#def simplifyTwins(base, nodeA, nodeB, leafA0, leafA1, leafB0, leafB1):
+def simplifyTwins(nodeAB, nodeA, nodeB, leafA0, leafA1, leafB0, leafB1):
     
-    #weightA = leafA0.weight*leafA1.weight
-    #weightB = leafB0.weight*leafB1.weight
-    #weight01 = leafA0.weight*leafB1.weight
-    #weight10 = leafA1.weight*leafB0.weight
-    #totalWeight = weightA+weightB+weight01+weight10
-    #relWeightA = weightA/totalWeight
-    #relWeightB = weightB/totalWeight
-    #relWeight01 = weight01/totalWeight
-    #relWeight10 = weight10/totalWeight
-        
-    #dist0 = leafA0.dist*relWeightA + leafB0.dist*relWeightB + (leafA0.dist+nodeA.dist)*relWeight01 + (leafB0.dist+nodeB.dist)*relWeight10
-    #dist1 = leafA1.dist*relWeightA + leafB1.dist*relWeightB + (leafA1.dist+nodeA.dist)*relWeight10 + (leafB1.dist+nodeB.dist)*relWeight01
-    #distBase = (nodeA.dist+base.dist)*relWeightA + (nodeB.dist+base.dist)*relWeightB + base.dist*(relWeight01 + relWeight10)
-
-    #leafA0.weight += leafB0.weight
-    #leafA1.weight += leafB1.weight    
-
-    #leafB0.delete()
-    #leafB1.delete()
-    #nodeB.delete()
-    #base.delete()
+    WA0=leafA0.weight
+    WA1=leafA1.weight
+    WB0=leafB0.weight
+    WB1=leafB1.weight
     
-    #nodeA.dist = distBase
-    #leafA0.dist = dist0
-    #leafA1.dist = dist1
-    
+    leafB0.delete()
+    leafB1.delete()
+    nodeB.delete()
+    nodeAB.delete()
+
+    leafA0.weight = WA0+WB0
+    leafA1.weight = WA1+WB1    
 
 
-def simplifyTree(tree,taxonDict):
+def simplifyTree(tree,taxonDict,preserve_branch_length=True):
     simpTree = tree.copy("newick")
     #remove all leaves that are not in the taxonDict
     simpTree.prune(taxonDict.keys(), preserve_branch_length = True)
@@ -263,7 +249,6 @@ def simplifyTree(tree,taxonDict):
     #this all gets run over and over until no new changes are made
     changed = True
     while changed:
-        print simpTree.write()
         changed = False
         for node in simpTree.traverse("postorder"):
             cdn0 = node.get_children()
@@ -294,21 +279,21 @@ def simplifyTree(tree,taxonDict):
                             changed = True
                 #if we get here the pair are both not leaves, but we can check if they're twins
                 #This code only simplifies pair twins, but in theory all twins could be simplified'''
-                '''I COULD NOT GET THIS FUNCTION TO GIVE FORRECT DISTS, SO I GAVE UP'''
-                #elif len(node.get_leaves()) == 4:
-                    ##print "Checking for twins"
-                    #lvsA,lvsB = [child.get_leaves() for child in cdn0]
-                    #if len(lvsA) == len(lvsB) == 2:
-                        #taxaA = [taxonDict[lf.name] for lf in lvsA]
-                        #taxaB = [taxonDict[lf.name] for lf in lvsB]
-                        #if taxaA == taxaB:
-                            ##print "removing", lvsB[0].name, "and", lvsB[1].name 
-                            #simplifyTwins(base=node,nodeA=cdn0[0],nodeB=cdn0[1],leafA0=lvsA[0],leafA1=lvsA[1],leafB0=lvsB[0],leafB1=lvsB[1])
-                            #changed = True
-                        #elif taxaA[0] == taxaB[1] and taxaA[1] == taxaB[0]:
-                            ##print "removing", lvsB[1].name, "and", lvsB[0].name 
-                            #simplifyTwins(base=node,nodeA=cdn0[0],nodeB=cdn0[1],leafA0=lvsA[0],leafA1=lvsA[1],leafB0=lvsB[1],leafB1=lvsB[0])
-                            #changed = True
+                #DOE NOT PRESERVE BRANCH LENGTH
+                elif len(node.get_leaves()) == 4 and not preserve_branch_length:
+                    #print "Checking for twins"
+                    lvsA,lvsB = [child.get_leaves() for child in cdn0]
+                    if len(lvsA) == len(lvsB) == 2:
+                        taxaA = [taxonDict[lf.name] for lf in lvsA]
+                        taxaB = [taxonDict[lf.name] for lf in lvsB]
+                        if taxaA == taxaB:
+                            #print "removing", lvsB[0].name, "and", lvsB[1].name 
+                            simplifyTwins(nodeAB=node,nodeA=cdn0[0],nodeB=cdn0[1],leafA0=lvsA[0],leafA1=lvsA[1],leafB0=lvsB[0],leafB1=lvsB[1])
+                            changed = True
+                        elif taxaA[0] == taxaB[1] and taxaA[1] == taxaB[0]:
+                            #print "removing", lvsB[1].name, "and", lvsB[0].name 
+                            simplifyTwins(nodeAB=node,nodeA=cdn0[0],nodeB=cdn0[1],leafA0=lvsA[0],leafA1=lvsA[1],leafB0=lvsB[1],leafB1=lvsB[0])
+                            changed = True
     
     return simpTree
 
@@ -325,7 +310,7 @@ def simplifyTree(tree,taxonDict):
 
 
 #new version that does the tree simplification
-def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False):
+def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False, abortCutoff = 100000):
     assert isRooted(tree), "Tree must be rooted"
     nTaxa = len(taxonNames)
     nCombosTotal = prod([len(t) for t in taxa])
@@ -333,8 +318,8 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False):
     for x in range(len(taxa)):
         for y in taxa[x]:
             taxonDict[y] = taxonNames[x]
-    #simplify the tree
-    simpTree = simplifyTree(tree, taxonDict)
+    #simplify the tree - if getting dists preserve branch length (slower)
+    simpTree = simplifyTree(tree, taxonDict, preserve_branch_length=getDists)
     if verbose: print >> sys.stderr, simpTree
     leaves = simpTree.get_leaves()
     if verbose: print >> sys.stderr, "Simplified tree has", len(leaves), "leaves."
@@ -344,6 +329,7 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False):
     simpTaxa = [[t for t in taxon if t in leafNames] for taxon in taxa]
     #we make a generator object for all combos
     nCombos = prod([len(t) for t in simpTaxa])
+    if nCombos > abortCutoff: return None
     if verbose: print >> sys.stderr, "There are", nCombos, "combinations to test."
     comboGenerator = itertools.product(*simpTaxa)
     if not topos: allTrees(taxonNames, [])
@@ -368,13 +354,14 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False):
         x = topoIDs.index(prunedID)
         counts[x] += comboWeight
         #get pairwise dists if necessary
-        print pruned.write()
         if getDists: dists[:,:,x] += currentDists*comboWeight
 
     if getDists: meanDists = dists/counts
     else: meanDists = np.NaN
 
     return {"topos":topos,"weights":counts,"dists":meanDists}
+
+
 
 
 def listToNwk(t):
@@ -426,7 +413,9 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
     parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
     parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
+    parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
     parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
+    parser.add_argument("--abortCutoff", help="# tips in simplified tree to abort 'complete' weighting", type=int, action = "store", default = 100000)
     parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
     parser.add_argument("-g", "--group", help="Group name and individual names (separated by commas)", action='append', nargs="+", required = True, metavar=("name","[inds]"))
     parser.add_argument("--groupsFile", help="Optional file of sample names and groups", action = "store", required = False)
@@ -440,7 +429,7 @@ if __name__ == "__main__":
     else: getDists = False
 
     method = args.method
-
+    backupMethod = args.backupMethod
     verbose = args.verbose
 
     #################################################################################################################################
@@ -485,14 +474,14 @@ if __name__ == "__main__":
     
     # check method
 
-    if method == "fixed":
+    if method == "fixed" or (method == "complete" and backupMethod == "fixed"):
         nIts = args.iterations
         if nIts >= prod([len(t) for t in taxa]):
             print >> sys.stderr, "Warning: number of iterations is equal or greater than possible combinations.\n"
             nIts = prod([len(t) for t in taxa])
             print >> sys.stderr, "This could be very slow. Use method 'complete' for fast(er) exhaustive sampling."
     
-    elif method == "threshold":
+    elif method == "threshold" or (method == "complete" and backupMethod == "threshold"):
         assert args.thresholdTable, "A threshold table must be provided using argument --thresholdTable."
         thresholdTableFileName = args.thresholdTable
         with open(thresholdTableFileName) as ttf:
@@ -547,18 +536,23 @@ if __name__ == "__main__":
             #root if necessary
             if args.outgroup: tree.set_outgroup(args.outgroup)
             
-            if method == "fixed":
+            weightsData = None
+            
+            if method == "complete":
+                weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
+            
+            if method == "fixed" or (backupMethod == "fixed" and weightsData == None):
                 weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
-            elif method == "threshold":
+            
+            if method == "threshold" or (backupMethod == "threshold" and weightsData == None):
                 weightsData = weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
-            elif method == "complete":
-                weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos)
+                    
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
         
             if getDists:
                 distsByTopo = []
                 for x in range(len(topos)):
-                    distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(ntaxa), 2)]))
+                    distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(nTaxa), 2)]))
                 distsLine = "\t".join(distsByTopo)    
         else:
             weightsLine = "\t".join(["NA"]*len(topos))
