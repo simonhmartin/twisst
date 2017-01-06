@@ -146,7 +146,7 @@ java -Xmx12g -jar beagle.jar gt=input.vcf.gz out=output.vcf.gz impute=true nthre
 * My script to generate the trees takes a simple genotype format as input, which gives the scaffold, position and genotype for each sample. My code to generate this file from a vcf is in my repo [genomics_general](https://github.com/simonhmartin/genomics_general). Here is an example command:
 
 ```bash
-python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 > output.geno.gz
+python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 | gzip > output.geno.gz
 ```
 
 * To get neighbour joining trees for snp windows, I have a script that runs [Phyml](http://www.atgc-montpellier.fr/phyml/) for windows, using parallelisation, and outputs a single trees file. You can get the script from my [genomics_general](https://github.com/simonhmartin/genomics_general) repo. Here is an example command:
