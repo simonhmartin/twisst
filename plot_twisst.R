@@ -180,3 +180,32 @@ plot_weights(weights_dataframe=weights_smooth, positions=window_data$mid,
 dev.off()
 
 
+
+################ plot topologies #########
+
+library(ape)
+
+topos = read.tree(file="examples/4.topos")
+
+#unrooted trees
+
+pdf(file = paste0("examples/example.topos.unrooted.pdf"), width = 5, height = 2)
+par(mfrow = c(1,3), mar = c(1,1,2,1), xpd=NA)
+for (n in 1:length(topos)){
+  plot.phylo(topos[[n]], type = "unrooted", edge.color=cols[n], edge.width=5, cex = 1, rotate.tree=90, adj = .5, label.offset=.2)
+  mtext(side=3,text=paste0("topo",n))
+  }
+dev.off()
+
+
+#root trees
+for (i in 1:length(topos)) topos[[i]] <- root(topos[[i]], "D", resolve.root = T)
+
+pdf(file = paste0("examples/example.topos.rooted.pdf"), width = 5, height = 2)
+par(mfrow = c(1,3), mar = c(1,1,2,1), xpd=NA)
+for (n in 1:length(topos)){
+  plot.phylo(topos[[n]], type = "clad", edge.color=cols[n], edge.width=5, label.offset=.1, cex = 1)
+  mtext(side=3,text=paste0("topo",n))
+  }
+dev.off()
+
