@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 
 import argparse
 import sys
@@ -121,7 +122,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store")
 parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
-parser.add_argument("-o", "--topoFile", help="Output file of all topologies", action = "store", required = False)
+parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
+parser.add_argument("--outTopos", help="Output file for topologies used", action = "store", required = False)
 parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
 parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
@@ -170,7 +172,9 @@ namesSet = set(names)
 assert len(names) == len(namesSet), "Each sample should only be in one group."
 
 #get all topologies
-topos = twisst.allTopos(taxonNames, [])
+if args.inputTopos:
+    with open(args.inputTopos, "r") as tf: topos = [ete3.Tree(ln) for ln in tf.readlines()]
+else: topos = allTopos(taxonNames, [])
 
 for topo in topos: print >> sys.stderr, topo
 
@@ -179,9 +183,9 @@ for topo in topos: print >> sys.stderr, topo
 #toposRooted = [topo.copy() for topo in topos]
 #for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
 
-if args.topoFile:
-    with open(args.topoFile, "w") as topoFile:
-        topoFile.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
+if args.outputTopos:
+    with open(args.outputTopos, "w") as tf:
+        tf.write("\n".join([t.write(format = 9) for t in topos]) + "\n")
 
 #################################################################################################################################
 
