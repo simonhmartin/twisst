@@ -43,10 +43,10 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, outgroup, nIts=
             if method == "complete":
                 weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
             
-            if method == "fixed" or (backupMethod == "fixed" and weightsData == None):
+            if method == "fixed" or (method == "complete" and backupMethod == "fixed" and weightsData == None):
                 weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
             
-            if method == "threshold" or (backupMethod == "threshold" and weightsData == None):
+            if method == "threshold" or (method == "complete" and backupMethod == "threshold" and weightsData == None):
                 weightsData = twisst.weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
 
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
@@ -123,7 +123,7 @@ parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse
 parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
 parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
-parser.add_argument("--outTopos", help="Output file for topologies used", action = "store", required = False)
+parser.add_argument("--outputTopos", help="Output file for topologies used", action = "store", required = False)
 parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
 parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
@@ -174,10 +174,11 @@ assert len(names) == len(namesSet), "Each sample should only be in one group."
 #get all topologies
 if args.inputTopos:
     with open(args.inputTopos, "r") as tf: topos = [ete3.Tree(ln) for ln in tf.readlines()]
-else: topos = allTopos(taxonNames, [])
+else: topos = twisst.allTopos(taxonNames, [])
 
-for topo in topos: print >> sys.stderr, topo
-
+for topo in topos:
+    topo.set_outgroup(taxonNames[-1])
+    print >> sys.stderr, topo
 
 #make a rooted set of topos, just for printing - this doesn't affect the analysis
 #toposRooted = [topo.copy() for topo in topos]

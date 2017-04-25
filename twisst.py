@@ -37,13 +37,24 @@ def getPrunedCopy(tree, leavesToKeep, preserve_branch_length):
 
 def isRooted(tree): return len(tree.get_children()) == 2
 
+def treeToEdges(tree):
+    edges=[]
+    for n in tree.traverse(strategy="postorder"):
+        if n.up is not None: edges.append((n.name, n.up.name, n.dist,))
+    return edges
+
+def addNodeNames(tree):
+    for n in tree.traverse():
+        if n.name is not None: n.name = "_".join(sorted(n.get_leaf_names()))
+
+
 #new version that does not do simplification, but has a few improvements
-def weightTree(tree, taxa, taxonNames, nIts=None, topos=None, getDists = False):
+def weightTree(tree, taxa, taxonNames, taxonDict=None, nIts=None, topos=None, getLengths = False, getDists = False):
     nTaxa = len(taxonNames)
-    taxonDict = {}
-    for x in range(nTaxa):
-        for y in taxa[x]:
-            taxonDict[y] = taxonNames[x]
+    if not taxonDict:
+        taxonDict = {}
+        for x in range(nTaxa):
+            for y in taxa[x]: taxonDict[y] = taxonNames[x]
     #we make a generator object for all combos
     #if there are more combos than Its, we need to make random samples
     nCombos = prod([len(t) for t in taxa])
@@ -53,43 +64,60 @@ def weightTree(tree, taxa, taxonNames, nIts=None, topos=None, getDists = False):
         nIts = nCombos
     else: comboGenerator = randomComboGen(taxa)
     if not topos: topos=allTrees(taxonNames, [])
+    for t in topos: t.set_outgroup(taxonNames[-1])
+    if getLengths:
+        #nodes need names to allow branch comparisons
+        for t in topos: addNodeNames(t)
+    nTopos = len(topos)
     #unique id for each topo
     topoIDs = [t.get_topology_id() for t in topos]
-    counts = np.zeros(len(topos), dtype=int)
-    if getDists: dists = np.zeros([nTaxa, nTaxa, len(topos)])
+    counts = np.zeros(nTopos, dtype=int)
+    #if getting branch lengths make a dict for each topology
+    if getLengths:
+        parentsAndChildren = [[(n.up.name,n.name,) for n in t.traverse() if n.up is not None] for t in topos]
+        parents = [[pc[0] for pc in parentsAndChildren[x]] for x in range(nTopos)]
+        children = [[pc[1] for pc in parentsAndChildren[x]] for x in range(nTopos)]
+        lengths = [np.zeros(len(children[x])) for x in range(nTopos)]
+    else: parents = children = None
+    if getDists: dists = np.zeros([nTaxa, nTaxa, nTopos])
     for iteration in xrange(nIts):
         combo = comboGenerator.next()
         pruned = getPrunedCopy(tree, combo, preserve_branch_length = getDists)
         #rename leaves
         for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
         #get pairwise dists if necessary
+        pruned.set_outgroup(taxonNames[-1])
         if getDists:
             currentDists = np.zeros([nTaxa,nTaxa])
             for pair in itertools.combinations(range(nTaxa), 2):
                 currentDists[pair[0],pair[1]] = currentDists[pair[1],pair[0]] = pruned.get_distance(taxonNames[pair[0]], taxonNames[pair[1]])
         #find topology match
-        pruned.unroot()
+        #pruned.unroot()
         prunedID = pruned.get_topology_id()
         x = topoIDs.index(prunedID)
         counts[x] += 1
         if getDists: dists[:,:,x] += currentDists
-    if getDists: meanDists = dists/counts
-    else: meanDists = np.NaN
-    return {"topos":topos,"weights":counts,"dists":meanDists}
-
-
+        #if getting average lengths, add branch lengths to average topos 
+        if getLengths:
+            addNodeNames(pruned)
+            lengthDict = dict([(n.name,n.dist,) for n in pruned.traverse()])
+            lengths[x] += [lengthDict[name] for name in children[x]]
+    meanDists = dists/counts if getDists else np.NaN
+    meanLengths = [lengths[x]/counts[x] for x in range(nTopos)] if getLengths else np.NaN
+    return {"topos":topos,"weights":counts,"dists":meanDists,"parents":parents,"children":children,"lengths":meanLengths}
 
 
 #new version that does not do simplification, but has a few improvements
-def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, topos=None, getDists = False):
+def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, taxonDict=None, topos=None, getDists = False):
     nTaxa = len(taxonNames)
-    taxonDict = {}
-    for x in range(nTaxa):
-        for y in taxa[x]:
-            taxonDict[y] = taxonNames[x]
+    if not taxonDict:
+        taxonDict = {}
+        for x in range(nTaxa):
+            for y in taxa[x]: taxonDict[y] = taxonNames[x]
     #make random combinations for sampling
     comboGenerator = randomComboGen(taxa)
-    if not topos: allTrees(taxonNames, [])
+    if not topos: topos=allTrees(taxonNames, [])
+    for t in topos: t.set_outgroup(taxonNames[-1])
     #unique id for each topo
     topoIDs = [t.get_topology_id() for t in topos]
     counts = np.zeros(len(topos), dtype=int)
@@ -100,12 +128,12 @@ def weightTreeThreshold(tree, taxa, taxonNames, thresholdDict, topos=None, getDi
         pruned = getPrunedCopy(tree, combo, preserve_branch_length = getDists)
         for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
         #get pairwise dists if necessary
+        pruned.set_outgroup(taxonNames[-1])
         if getDists: 
             currentDists = np.zeros([nTaxa,nTaxa])
             for pair in itertools.combinations(range(nTaxa), 2):
                 currentDists[pair[0],pair[1]] = currentDists[pair[1],pair[0]] = pruned.get_distance(taxonNames[pair[0]], taxonNames[pair[1]])
         #find topology match
-        pruned.unroot()
         prunedID = pruned.get_topology_id()
         x = topoIDs.index(prunedID)
         counts[x] += 1
@@ -311,14 +339,14 @@ def simplifyTree(tree,taxonDict,preserve_branch_length=True):
 
 
 #new version that does the tree simplification
-def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False, abortCutoff = 100000):
-    assert isRooted(tree), "Tree must be rooted"
+def weightTreeSimp(tree, taxa, taxonNames, taxonDict=None,  topos = None, getDists = False, abortCutoff = 100000):
+    #assert isRooted(tree), "Tree must be rooted"
     nTaxa = len(taxonNames)
     nCombosTotal = prod([len(t) for t in taxa])
-    taxonDict = {}
-    for x in range(len(taxa)):
-        for y in taxa[x]:
-            taxonDict[y] = taxonNames[x]
+    if not taxonDict:
+        taxonDict = {}
+        for x in range(nTaxa):
+            for y in taxa[x]: taxonDict[y] = taxonNames[x]
     #simplify the tree - if getting dists preserve branch length (slower)
     simpTree = simplifyTree(tree, taxonDict, preserve_branch_length=getDists)
     if verbose: print >> sys.stderr, simpTree
@@ -333,7 +361,7 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False, abort
     if nCombos > abortCutoff: return None
     if verbose: print >> sys.stderr, "There are", nCombos, "combinations to test."
     comboGenerator = itertools.product(*simpTaxa)
-    if not topos: allTrees(taxonNames, [])
+    if not topos: topos = allTrees(taxonNames, [])
     topoIDs = [t.get_topology_id() for t in topos]
     counts = np.zeros(len(topos), dtype=int)
     if getDists: dists = np.zeros([nTaxa, nTaxa, len(topos)])
@@ -342,6 +370,7 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False, abort
         pruned = getPrunedCopy(simpTree, combo, preserve_branch_length = getDists)
         #generify pruned tree
         for leaf in pruned.iter_leaves(): leaf.name = taxonDict[leaf.name]
+        pruned.set_outgroup(taxonNames[-1])
         
         #if getting dists - do that first before unrooting
         if getDists:
@@ -350,7 +379,6 @@ def weightTreeSimp(tree, taxa, taxonNames, topos = None, getDists = False, abort
                 currentDists[pair[0],pair[1]] = currentDists[pair[1],pair[0]] = pruned.get_distance(taxonNames[pair[0]], taxonNames[pair[1]])
 
         #check for topology match
-        pruned.unroot()
         prunedID = pruned.get_topology_id()
         x = topoIDs.index(prunedID)
         counts[x] += comboWeight
@@ -411,17 +439,20 @@ if __name__ == "__main__":
     parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store")
     parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
     parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
+    parser.add_argument("-L", "--lengthsFile", help="Output file of average branch lengths", action = "store", required = False)
     parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
-    parser.add_argument("--outTopos", help="Output file for topologies used", action = "store", required = False)
+    parser.add_argument("--outputTopos", help="Output file for topologies used", action = "store", required = False)
     parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
     parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
     parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
     parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
     parser.add_argument("--abortCutoff", help="# tips in simplified tree to abort 'complete' weighting", type=int, action = "store", default = 100000)
     parser.add_argument("--thresholdTable", help="Lookup_table_for_sampling_thresholds", action = "store")
+    parser.add_argument("--noRecord", help="Do not use prior results wind doing complete", action = "store_true")
     parser.add_argument("-g", "--group", help="Group name and individual names (separated by commas)", action='append', nargs="+", required = True, metavar=("name","[inds]"))
     parser.add_argument("--groupsFile", help="Optional file of sample names and groups", action = "store", required = False)
     parser.add_argument("--verbose", help="Verbose output", action="store_true")
+    parser.add_argument("--silent", help="No output", action="store_true")
 
 
     args = parser.parse_args()
@@ -429,6 +460,8 @@ if __name__ == "__main__":
 
     if args.distsFile: getDists = True
     else: getDists = False
+
+    getLengths = args.lengthsFile is not None
 
     method = args.method
     backupMethod = args.backupMethod
@@ -458,12 +491,20 @@ if __name__ == "__main__":
     namesSet = set(names)
     assert len(names) == len(namesSet), "Each sample should only be in one group."
     
+    taxonDict = {}
+    for x in range(nTaxa):
+        for y in taxa[x]: taxonDict[y] = taxonNames[x]
+    
     #get all topologies
     if args.inputTopos:
         with open(args.inputTopos, "r") as tf: topos = [ete3.Tree(ln) for ln in tf.readlines()]
     else: topos = allTopos(taxonNames, [])
     
-    for topo in topos: print >> sys.stderr, topo
+    nTopos = len(topos)
+    
+    for topo in topos:
+        topo.set_outgroup(taxonNames[-1])
+        print >> sys.stderr, topo
 
     #make a rooted set of topos, just for printing - this doesn't affect the analysis
     #toposRooted = [topo.copy("newick") for topo in topos]
@@ -489,7 +530,10 @@ if __name__ == "__main__":
         thresholdTableFileName = args.thresholdTable
         with open(thresholdTableFileName) as ttf:
             thresholdDict = dict([(int(tries),int(threshold)) for line in ttf.readlines() for tries,threshold in (line.split(),)])
-
+    
+    if method == "complete" and not getDists and not args.noRecord: weightsDict = {}
+    else: weightsDict = None
+    
     #################################################################################################################################
     ### file for weights
 
@@ -497,19 +541,29 @@ if __name__ == "__main__":
        weightsFile = gzip.open(args.weightsFile, "w") if args.weightsFile.endswith(".gz") else open(args.weightsFile, "w")
     else: weightsFile = sys.stdout
     
-    for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
+    for x in range(nTopos): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
-    weightsFile.write("\t".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
+    weightsFile.write("\t".join(["topo" + str(x+1) for x in range(nTopos)]) + "\n")
 
     ### file for lengths
 
     if getDists:
         if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
         else: distsFile = open(args.distsFile, "w")
-        for x in range(len(topos)):
+        for x in range(nTopos):
             distsFile.write("\t".join(["topo" + str(x+1) + "_" + "_".join(pair) for pair in itertools.combinations(taxonNames,2)]) + "\t")
         distsFile.write("\n")
 
+    if getLengths:
+        lengthsFile = gzip.open(args.lengthsFile, "w") if args.lengthsFile[-3:] == ".gz" else open(args.lengthsFile, "w")
+        #name internal nodes
+        for t in topos: addNodeNames(t)
+        parentsAndChildren = [[(n.up.name,n.name,) for n in t.traverse() if n.up is not None] for t in topos]
+        children = [[pc[1] for pc in parentsAndChildren[x]] for x in range(nTopos)]
+        for x in range(nTopos): lengthsFile.write("#" + "topo" + str(x+1) + "\t" + " ".join(["--".join(pair) for pair in parentsAndChildren[x]]) + "\n")
+        #lengthsFile.write("\t".join(["\t".join(["topo" + str(x+1) + "_" + nodeName for nodeName in children[x]]) for x in range(nTopos)]) + "\n")
+        
+    
     ################################################################################################################################
 
     #open tree file
@@ -522,7 +576,7 @@ if __name__ == "__main__":
     
     ################################################################################################################################
 
-    n = 0
+    nTrees = 0
 
     while len(line) >= 1:
 
@@ -542,34 +596,53 @@ if __name__ == "__main__":
             weightsData = None
             
             if method == "complete":
-                weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
+                if weightsDict and not getDists and not getLengths:
+                    #if possible, see if we already have a set of weights for a tree like this
+                    genericTree = tree.copy("newick")
+                    for leaf in genericTree.iter_leaves(): leaf.name = taxonDict[leaf.name]
+                    genericID = genericTree.get_topology_id()
+                    try: weightsData = weightsDict[genericID]
+                    except: pass
+                if weightsData is None:
+                    weightsData = weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, taxonDict=taxonDict,
+                                             topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
+                    if weightsDict and not getDists and weightsData is not None:
+                        weightsDict[genericID] = weightsData
             
-            if method == "fixed" or (backupMethod == "fixed" and weightsData == None):
-                weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
+            if method == "fixed" or (method == "complete" and backupMethod == "fixed" and weightsData == None):
+                weightsData = weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, taxonDict=taxonDict,
+                                         nIts=nIts, topos=topos, getDists=getDists, getLengths=getLengths)
             
-            if method == "threshold" or (backupMethod == "threshold" and weightsData == None):
-                weightsData = weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
+            if method == "threshold" or (method == "complete" and backupMethod == "threshold" and weightsData == None):
+                weightsData = weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, taxonDict=taxonDict,
+                                                  topos=topos, getDists=getDists)
                     
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
         
             if getDists:
                 distsByTopo = []
-                for x in range(len(topos)):
+                for x in range(nTopos):
                     distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(nTaxa), 2)]))
                 distsLine = "\t".join(distsByTopo)    
+            if getLengths:
+                lengthsLine = "\t".join(["\t".join([str(round(l,4)) for l in weightsData["lengths"][x]]) for x in range(nTopos)])
         else:
-            weightsLine = "\t".join(["NA"]*len(topos))
-            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa), 2)))
+            weightsLine = "\t".join(["NA"]*nTopos)
+            if getDists: distsLine = "\t".join(["NA"]*nTopos*len(itertools.combinations(range(nTaxa), 2)))
+            if getLengths: lengthsLine = "\t".join(["0.0"]*sum(map(children, len)))
         
         weightsFile.write(weightsLine + "\n")
         if getDists: distsFile.write(distsLine + "\n")
+        if getLengths: lengthsFile.write(lengthsLine + "\n")
         
-        print >> sys.stderr, n
-        n += 1
+        if not args.silent: sys.stderr.write(str(nTrees)+"\n")
+        nTrees += 1
         line = treeFile.readline()
 
     treeFile.close()
     weightsFile.close()
+    if getDists: distsFile.close()
+    if getLengths: lengthsFile.close()
 
     sys.exit()
 
