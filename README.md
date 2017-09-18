@@ -1,4 +1,4 @@
-#Twisst: Topology weightying by iterative sampling of sub-trees
+# Twisst: Topology weightying by iterative sampling of sub-trees
 
 Topology weighting is a means to quantify relationships between taxa that are not necessarily monophyletic. It's a simple, descriptive method, designed for exploring how relationship vary across the genome using population genomic data.
 
@@ -28,7 +28,7 @@ Firstly, monophyletic groups of samples from the same taxon can be collapsed and
 
 ---
 
-###Code
+### Code
 
 The main script, `twisst.py` implements the topology weighting.
 
@@ -46,7 +46,7 @@ The script `run_twisst_parallel.py` allows parallelisation using python `multipr
 
 ---
 
-###Input
+### Input
 
 The main input is a tree file containing one or more trees in newick format. Most variants of newick are accepted - see the [ETE documentation](http://etetoolkit.org/docs/latest/reference/index.html) for details.
 
@@ -56,7 +56,7 @@ All trees must contain all specified individual names as tip labels (see below.)
 
 ---
 
-###Output
+### Output
 
 There are two outputs:
 
@@ -66,7 +66,7 @@ There are two outputs:
 
 ---
 
-###Specifying taxa and individuals 
+### Specifying taxa and individuals 
 
 Taxa (groups) must be specified in the command line, using the `-g` flag. This flag must be present at least four times (with three groups there is only one possible unrooted topology).
 
@@ -106,7 +106,7 @@ Where groups.tsv is a text file containing the following:
 ```
 ---
 
-###Weighting method
+### Weighting method
 
 There are three options for the weighting method, specified with the `--method` flag.
 
@@ -125,6 +125,7 @@ My approach is to subset the alignment into windows and infer trees for each sep
 #### My pipeline from BAM to trees
 
 * Starting with bam files, I genotype with [GATK](https://software.broadinstitute.org/gatk/), using the `HaplotypeCaller` and `GenotypeGVCFs` tools. Here are example commands:
+
 ```bash
 #HaplotypeCaller
 java -jar GenomeAnalysisTK.jar -T HaplotypeCaller -nct 16 -R reference.fa -I input.bam -o output.g.vcf --emitRefConfidence GVCF --output_mode EMIT_ALL_CONFIDENT_SITES
@@ -133,6 +134,7 @@ java -jar GenomeAnalysisTK.jar -T GenotypeGVCFs -nt 16 -R reference.fa -V output
 ```
 
 * I filter vcfs using [Bcftools](https://samtools.github.io/bcftools/). This allows you to remove indels and invariant sites. I also like to convert uncertain genotypes to missing (`./.`) before phasing. Here is an example command that will convert all genotypes with < 5x depth of coverage and GQ < 30 to missing.
+
 ```bash
 bcftools filter -e 'FORMAT/DP < 5 | FORMAT/GQ < 30' --set-GTs . input.vcf.gz -O u | bcftools view -U -i 'TYPE=="snp" & MAC >= 2' -O z > output.vcf.gz
 ``` 
@@ -153,7 +155,7 @@ python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 
 ```bash
 python phyml_sliding_windows.py -T 10 -g input.phased.geno.gz --prefix output.phyml_bionj.w50 -w 50 --windType sites --model GTR --genoFormat phased
 ```
-
+**NOTE: if you use phased diploid genotypes in `phyml_sliding_windows.py`, the output trees will include two tips for each sample, with suffixes "_A" and "_B". You will need to ensure that the groupd defined for `Twisst` match these names.**
 
 
 
