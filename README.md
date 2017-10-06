@@ -27,6 +27,12 @@ This code implements the method *Twisst* (topology weighting by iterative sampli
 Firstly, monophyletic groups of samples from the same taxon can be collapsed and weighted appropriately. This dramatically reduces the number of unique subtrees to consider. However, in some cases there are still too many to compute the weighting in reasonable time. In these cases it is best to randomly sample a limited number of subtrees and take the estimates weightings. The errors are binomially distributed, so it's possible to also estimate confidence intervals.
 
 ---
+### Papers
+[Martin and Van Belleghem 2017](http://doi.org/10.1534/genetics.116.194720) is where we present the *Twisst* method in full and test it on simulated and real data. Please cite this when using the software.
+
+[Van Belleghem et al. 2017](http://doi.org/10.1038/s41559-016-0052) is where we first applied *Twisst* to identify narrow shared blocks in regulatory reagions.
+
+---
 
 ### Code
 
