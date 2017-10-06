@@ -13,9 +13,7 @@ The relationship among a given set of taxa can be defined by a number of possibl
 ```
 Given a tree with any number of tips (or leaves), each belonging to a particular taxon, the weighting of each taxon topology is defined as the fraction of all unique sub-trees, in which each taxon is represented by a single tip, that match that topology. Topology weighting therefore reduces the complexity of the full tree to a number of values, each giving the proportionate contribution of a particular taxon tree to the full tree. 
 
-This code implements the method *Twisst* (topology weighting by iterative sampling of sub-trees), which does what it says: it computes the weightings by iteratively sampling sub-trees from the full tree and checking their topology. This can be slow if there are many tips (e.g. 4 taxa with ten tips each gives 10 000 unique subtrees to consider. But there are some shortcuts to speed things up.
-
-Firstly, monophyletic groups of samples from the same taxon can be collapsed and weighted appropriately. This dramatically reduces the number of unique subtrees to consider. However, in some cases there are still too many to compute the weighting in reasonable time. In these cases it is best to randomly sample a limited number of subtrees and take the estimates weightings. The errors are binomially distributed, so it's possible to also estimate confidence intervals.
+This code implements the method *Twisst* (topology weighting by iterative sampling of sub-trees), which does what it says: it computes the weightings by iteratively sampling sub-trees from the full tree and checking their topology. This can be slow if there are many tips (e.g. 4 taxa with ten tips each gives 10 000 unique subtrees to consider. But there are some shortcuts to speed things up - see [Weighting Method](#weighting-method) below.
 
 ---
 ### Papers
@@ -103,7 +101,7 @@ Where groups.tsv is a text file containing the following:
 ```
 ---
 
-### Weighting method
+### Weighting Method
 
 There are three options for the weighting method, specified with the `--method` flag.
 
