@@ -6,19 +6,10 @@ The relationship among a given set of taxa can be defined by a number of possibl
 
 
 ```
-  A-\    /-C
-     |--|   
-  B-/    \-D
+  A-\    /-C         A-\    /-B         A-\    /-B
+     |--|               |--|               |--|
+  B-/    \-D         C-/    \-D         D-/    \-C
 
-
-  A-\    /-B
-     |--|
-  C-/    \-D
-
-
-  A-\    /-B
-     |--|
-  D-/    \-C
 ```
 Given a tree with any number of tips (or leaves), each belonging to a particular taxon, the weighting of each taxon topology is defined as the fraction of all unique sub-trees, in which each taxon is represented by a single tip, that match that topology. Topology weighting therefore reduces the complexity of the full tree to a number of values, each giving the proportionate contribution of a particular taxon tree to the full tree. 
 
