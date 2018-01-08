@@ -7,6 +7,7 @@ import ete3
 import operator
 import twisst
 import itertools
+import numpy as np
 
 from multiprocessing import Process, Queue
 from multiprocessing.queues import SimpleQueue
@@ -15,18 +16,16 @@ from time import sleep
 
 ##############################################################################################################################
 
-def prod(iterable): return reduce(operator.mul, iterable, 1)
-
 '''A function that reads from the line queue, calls some other function and writes to the results queue
 This function needs to be tailored to the particular analysis funcion(s) you're using. This is the function that will run on each of the N cores.'''
 def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, outgroup, nIts=None,
-                       topos = None, getDists = False, method = "fixed", thresholdDict=None):
+                       topos = None, getLengths=False, getDists = False, method = "fixed", thresholdDict=None):
     nTaxa=len(taxa)
+    nTopos = len(topos)
     while True:
         lineNumber,line = lineQueue.get()
-        try: tree = ete3.Tree(line)
-        except: tree = None
-
+        tree = twisst.readTree(line)
+        
         if tree:
             #clean off unneccesary branches - speeds up downstream analyses
             leafNamesSet = set([leaf.name for leaf in tree.get_leaves()])
@@ -41,31 +40,34 @@ def weightTree_wrapper(lineQueue, resultQueue, taxa, taxonNames, outgroup, nIts=
             weightsData = None
             
             if method == "complete":
-                weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getDists=getDists, abortCutoff=args.abortCutoff)
+                weightsData = twisst.weightTreeSimp(tree=tree, taxa=taxa, taxonNames=taxonNames, topos=topos, getLengths=getLengths, getDists=getDists, abortCutoff=args.abortCutoff)
             
             if method == "fixed" or (method == "complete" and backupMethod == "fixed" and weightsData == None):
-                weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getDists=getDists)
+                weightsData = twisst.weightTree(tree=tree, taxa=taxa, taxonNames=taxonNames, nIts=nIts, topos=topos, getLengths=getLengths, getDists=getDists)
             
             if method == "threshold" or (method == "complete" and backupMethod == "threshold" and weightsData == None):
-                weightsData = twisst.weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getDists=getDists)
+                weightsData = twisst.weightTreeThreshold(tree=tree, taxa=taxa, taxonNames=taxonNames, thresholdDict=thresholdDict, topos=topos, getLengths=getLengths, getDists=getDists)
 
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
 
             if getDists:
                 distsByTopo = []
-                for x in range(len(topos)):
+                for x in range(nTopos):
                     distsByTopo.append("\t".join([str(round(weightsData["dists"][pair[0],pair[1],x], 4)) for pair in itertools.combinations(range(nTaxa), 2)]))
                 distsLine = "\t".join(distsByTopo)
+            if getLengths:
+                lengthsLine = "\t".join(["\t".join([str(round(l,4)) for l in weightsData["lengths"][x]]) for x in range(nTopos)])
         else:
-            weightsLine="\t".join(["NA"]*len(topos))
-            if getDists: distsLine = "\t".join(["NA"]*len(topos)*len(itertools.combinations(range(nTaxa), 2)))
+            weightsLine="\t".join(["nan"]*nTopos)
+            if getDists: distsLine = "\t".join(["nan"]*nTopos*len(list(itertools.combinations(range(nTaxa), 2))))
+            if getLengths: lengthsLine = "\t".join(["nan"]*sum(map(len,children)))
         
         if verbose: print >> sys.stderr, "Analysed tree", lineNumber
         result = [weightsLine]
         if getDists: result.append(distsLine)
+        if getLengths: result.append(lengthsLine)
         resultQueue.put((lineNumber, tuple(result), True))
         
-
 
 '''a function that watches the result queue and sorts results. This should be a generic funcion regardless of the result, as long as the first object is the line number, and this increases consecutively.'''
 def sorter(resultQueue, writeQueue, verbose):
@@ -122,6 +124,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--treeFile", help="File containing tree(s) to analyse", action = "store")
 parser.add_argument("-w", "--weightsFile", help="Output file of all weights", action = "store")
 parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dists", action = "store", required = False)
+parser.add_argument("-L", "--lengthsFile", help="Output file of average branch lengths", action = "store", required = False)
 parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
 parser.add_argument("--outputTopos", help="Output file for topologies used", action = "store", required = False)
 parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
@@ -139,8 +142,8 @@ parser.add_argument("--verbose", help="Verbose output", action="store_true")
 args = parser.parse_args()
 #args = parser.parse_args("-n 5 -t test.trees -o test.topos.txt -w test.weights.B.csv -g A a,b,c -g B d,e,f -g C g,h,i -g D j,k,l".split())
 
-if args.distsFile: getDists = True
-else: getDists = False
+getDists  = args.distsFile is not None
+getLengths = args.lengthsFile is not None
 
 method = args.method
 backupMethod = args.backupMethod
@@ -180,9 +183,7 @@ for topo in topos:
     topo.set_outgroup(taxonNames[-1])
     print >> sys.stderr, topo
 
-#make a rooted set of topos, just for printing - this doesn't affect the analysis
-#toposRooted = [topo.copy() for topo in topos]
-#for topo in toposRooted: topo.set_outgroup(taxonNames[-1])
+nTopos = len(topos)
 
 if args.outputTopos:
     with open(args.outputTopos, "w") as tf:
@@ -194,9 +195,9 @@ if args.outputTopos:
 
 if method == "fixed" or (method == "complete" and backupMethod == "fixed"):
     nIts = args.iterations
-    if nIts >= prod([len(t) for t in taxa]):
+    if nIts >= np.prod([len(t) for t in taxa]):
         print >> sys.stderr, "Warning: number of iterations is equal or greater than possible combinations.\n"
-        nIts = prod([len(t) for t in taxa])
+        nIts = np.prod([len(t) for t in taxa])
         print >> sys.stderr, "This could be very slow. Use method 'complete' for fast(er) exhaustive sampling."
     thresholdDict = None
 elif method == "threshold" or (method == "complete" and backupMethod == "threshold"):
@@ -215,9 +216,9 @@ if args.weightsFile:
     weightsFile = gzip.open(args.weightsFile, "w") if args.weightsFile.endswith(".gz") else open(args.weightsFile, "w")
 else: weightsFile = sys.stdout
 
-for x in range(len(topos)): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
+for x in range(nTopos): weightsFile.write("#topo" + str(x+1) + " " + topos[x].write(format = 9) + "\n") 
 
-weightsFile.write("\t".join(["topo" + str(x+1) for x in range(len(topos))]) + "\n")
+weightsFile.write("\t".join(["topo" + str(x+1) for x in range(nTopos)]) + "\n")
 
 outs = [weightsFile]
 
@@ -225,16 +226,21 @@ outs = [weightsFile]
 ### file for lengths
 
 if getDists:
-    if args.distsFile[-3:] == ".gz": distsFile = gzip.open(args.distsFile, "w")
-    else: distsFile = open(args.distsFile, "w")
-    for x in range(len(topos)):
+    distsFile = gzip.open(args.distsFile, "w") if args.distsFile[-3:] == ".gz" else open(args.distsFile, "w")
+    for x in range(nTopos):
         distsFile.write("\t".join(["topo" + str(x+1) + "_" + "_".join(pair) for pair in itertools.combinations(taxonNames,2)]) + "\t")
     distsFile.write("\n")
     outs += [distsFile]
 
-
-
-
+if getLengths:
+    lengthsFile = gzip.open(args.lengthsFile, "w") if args.lengthsFile[-3:] == ".gz" else open(args.lengthsFile, "w")
+    #name internal nodes
+    for t in topos: twisst.addNodeNames(t)
+    parentsAndChildren = [[(n.up.name,n.name,) for n in t.traverse() if n.up is not None] for t in topos]
+    children = [[pc[1] for pc in parentsAndChildren[x]] for x in range(nTopos)]
+    for x in range(nTopos): lengthsFile.write("#" + "topo" + str(x+1) + "\t" + " ".join(["--".join(pair) for pair in parentsAndChildren[x]]) + "\n")
+    #lengthsFile.write("\t".join(["\t".join(["topo" + str(x+1) + "_" + nodeName for nodeName in children[x]]) for x in range(nTopos)]) + "\n")
+    outs += [lengthsFile]
 
 ############################################################################################################################################
 
@@ -257,7 +263,7 @@ of course these will only start doing anything after we put data into the line q
 the function we call is actually a wrapper for another function.(s) This one reads from the line queue, passes to some analysis function(s), gets the results and sends to the result queue'''
 for x in range(threads):
     worker = Process(target=weightTree_wrapper, args = (lineQueue, resultQueue, taxa, taxonNames, args.outgroup,
-                                                        nIts, topos, getDists, method,thresholdDict,))
+                                                        nIts, topos, getLengths, getDists, method,thresholdDict,))
     worker.daemon = True
     worker.start()
     print >> sys.stderr, "started worker", x
@@ -305,7 +311,7 @@ while len(line) >= 1:
 ### wait for queues to empty
 
 
-print >> sys.stderr, "\nWriting final results...\n"
+print >> sys.stderr, "\nFinished reading trees...\n"
 while resultsHandled < linesQueued:
     sleep(1)
 
@@ -314,12 +320,11 @@ sleep(5)
 treeFile.close()
 weightsFile.close()
 if getDists: distsFile.close()
+if getLengths: lengthsFile.close()
 
 
 print >> sys.stderr, str(linesQueued), "lines were read.\n"
 print >> sys.stderr, str(resultsWritten), "results were written.\n"
-
-print "\nDone."
 
 sys.exit()
 
