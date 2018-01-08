@@ -32,7 +32,7 @@ It requires Pythion 2.7 and the libraries [`ete3`](http://etetoolkit.org/downloa
 A typical command looks like this:
 
 ```bash
-python twisst.py -t input.trees.gz -w output.weights.csv.gz -o topologies.trees -g A 1,2,3,4,5 -g B 6,7,8,9,10 -g C 11,12,13,14,15 -g D 16,17,18,19,20 --method complete
+python twisst.py -t input.trees.gz -w output.weights.csv.gz -g A 1,2,3,4,5 -g B 6,7,8,9,10 -g C 11,12,13,14,15 -g D 16,17,18,19,20 --method complete
 ```
 
 You can get a full list ot command options with `python twisst.py -h`.
@@ -135,7 +135,7 @@ java -jar GenomeAnalysisTK.jar -T GenotypeGVCFs -nt 16 -R reference.fa -V output
 bcftools filter -e 'FORMAT/DP < 5 | FORMAT/GQ < 30' --set-GTs . input.vcf.gz -O u | bcftools view -U -i 'TYPE=="snp" & MAC >= 2' -O z > output.vcf.gz
 ``` 
 
-* For diploids, I infer phase using [Beagle 4](https://faculty.washington.edu/browning/beagle/beagle.html), although I plan to start using [SHAPEIT](https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html). Here is an example Beagle command:
+* For diploids, you can infer phase using [Beagle 4](https://faculty.washington.edu/browning/beagle/beagle.html) or [SHAPEIT](https://mathgen.stats.ox.ac.uk/genetics_software/shapeit/shapeit.html). Here is an example Beagle command:
 
 ```bash
 java -Xmx12g -jar beagle.jar gt=input.vcf.gz out=output.vcf.gz impute=true nthreads=20 window=10000 overlap=1000 gprobs=false
@@ -149,7 +149,7 @@ python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 
 
 * To get neighbour joining trees for snp windows, I have a script that runs [Phyml](http://www.atgc-montpellier.fr/phyml/) for windows, using parallelisation, and outputs a single trees file. You can get the script from my [genomics_general](https://github.com/simonhmartin/genomics_general) repo. Here is an example command:
 ```bash
-python phyml_sliding_windows.py -T 10 -g input.phased.geno.gz --prefix output.phyml_bionj.w50 -w 50 --windType sites --model GTR --genoFormat phased
+python phyml_sliding_windows.py -T 10 -g input.phased.geno.gz --prefix output.phyml_bionj.w50 -w 50 --windType sites --model GTR --optimise n
 ```
 **NOTE: if you use phased diploid genotypes in `phyml_sliding_windows.py`, the output trees will include two tips for each sample, with suffixes "_A" and "_B". You will need to ensure that the groupd defined for `Twisst` match these names.**
 
