@@ -127,7 +127,7 @@ parser.add_argument("-D", "--distsFile", help="Output file of mean pairwise dist
 parser.add_argument("-L", "--lengthsFile", help="Output file of average branch lengths", action = "store", required = False)
 parser.add_argument("--inputTopos", help="Input file for user-defined topologies (optional)", action = "store", required = False)
 parser.add_argument("--outputTopos", help="Output file for topologies used", action = "store", required = False)
-parser.add_argument("--outgroup", help="Outgroup for rooting", action = "store")
+parser.add_argument("--outgroup", help="Outgroup for rooting - only affects speed", action = "store")
 parser.add_argument("--method", help="Tree sampling method", choices=["fixed", "threshold", "complete"], action = "store", default = "fixed")
 parser.add_argument("--backupMethod", help="Backup method if aborting complete", choices=["fixed", "threshold"], action = "store", default = "fixed")
 parser.add_argument("--iterations", help="Number of iterations for fixed partial sampling", type=int, action = "store", default = 400)
@@ -179,9 +179,9 @@ if args.inputTopos:
     with open(args.inputTopos, "r") as tf: topos = [ete3.Tree(ln) for ln in tf.readlines()]
 else: topos = twisst.allTopos(taxonNames, [])
 
-for topo in topos:
-    topo.set_outgroup(taxonNames[-1])
-    print >> sys.stderr, topo
+for topo in topos: topo.set_outgroup(taxonNames[-1])
+
+sys.stderr.write(asciiTrees(topos,5) + "\n")
 
 nTopos = len(topos)
 
