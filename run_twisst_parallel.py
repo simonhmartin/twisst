@@ -181,7 +181,7 @@ else: topos = twisst.allTopos(taxonNames, [])
 
 for topo in topos: topo.set_outgroup(taxonNames[-1])
 
-sys.stderr.write(asciiTrees(topos,5) + "\n")
+sys.stderr.write(twisst.asciiTrees(topos,5) + "\n")
 
 nTopos = len(topos)
 
