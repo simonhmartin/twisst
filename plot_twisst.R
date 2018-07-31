@@ -41,8 +41,19 @@ interleave <- function(x1,x2){
     }
 
 
+sum_df_columns <- function(df, columns_list){
+    new_df <- df[,0]
+    for (x in 1:length(columns_list)){
+        if (length(columns_list[[x]]) > 1) new_df[,x] <- apply(df[,columns_list[[x]]], 1, sum, na.rm=T)
+        else new_df[,x] <- df[,columns_list[[x]]]
+        if (is.null(names(columns_list)[x]) == FALSE) names(new_df)[x] <- names(columns_list)[x]
+        }
+    new_df
+    }
+
+
 plot.weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_cols=NULL,density=NULL,lwd=1,xlim=NULL,ylim=c(0,1),stacked=FALSE,
-                                        ylab="Weights", xlab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n", add=FALSE){
+                                        ylab="Weighting", xlab = "Position", main="",xaxt=NULL,yaxt=NULL,bty="n", add=FALSE){
     #get x axis
     x = positions
     #if a two-column matrix is given - plot step-like weights with start and end of each window    
