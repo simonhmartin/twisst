@@ -57,7 +57,7 @@ plot.weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_co
     #get x axis
     x = positions
     #if a two-column matrix is given - plot step-like weights with start and end of each window    
-    if (is.matrix(x)==TRUE) {
+    if (dim(as.matrix(x))[2]==2) {
         x = interleave(positions[,1],positions[,2])
         yreps=2
         }
@@ -91,3 +91,136 @@ plot.weights <- function(weights_dataframe,positions=NULL,line_cols=NULL,fill_co
     }
 
 options(scipen = 7)
+
+#Heres a set of 15 colourful colours from https://en.wikipedia.org/wiki/Help:Distinguishable_colors
+topo_cols <- c(
+"#0075DC", #Blue
+"#2BCE48", #Green
+"#FFA405", #Orpiment
+"#5EF1F2", #Sky
+"#FF5005", #Zinnia
+"#005C31", #Forest
+"#00998F", #Turquoise
+"#FF0010", #Red
+"#9DCC00", #Lime
+"#003380", #Navy
+"#F0A3FF", #Amethyst
+"#740AFF", #Violet
+"#426600", #Quagmire
+"#C20088", #Mallow
+"#94FFB5") #Jade
+
+
+########### Below are some more object-oriented tools for working with standard twisst output files
+
+library(ape)
+
+library(tools)
+
+#a function that imports weights 
+import.twisst <- function(weights_files, window_data_files, cleanup=TRUE){
+    l = list()
+
+    l$n_datasets <- length(weights_files)
+    
+    l$weights_raw <- lapply(weights_files, read.table ,header=TRUE)
+        
+    l$weights <- sapply(l$weights_raw, function(raw) raw/apply(raw, 1, sum), simplify=F)
+    
+    #get window_data if present
+    l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
+    
+    if (cleanup==TRUE){
+        for (i in 1:l$n_datasets){
+            #remove rows containing NA values
+            good_rows = which(is.na(apply(l$weights[[i]],1,sum)) == F)
+            l$weights[[i]] <- l$weights[[i]][good_rows,]
+            l$window_data[[i]] = l$window_data[[i]][good_rows,]
+            }
+        }
+    
+    l$pos = sapply(l$weights, function(w) 1:nrow(w))
+    
+        #attempt to retrieve topologies
+    if ("package:ape" %in% search()){
+        n_topos = ncol(l$weights[[1]])
+        if (file_ext(weights_file) == ".gz") cat="cat" else cat="zcat"
+        topos_text = system(paste(cat, weights_file, "| head -n", n_topos), intern = T)
+        l$topos <- read.tree(text = topos_text)
+        }
+    else l$topos = NULL
+    
+    l
+    }
+
+
+smooth.twisst <- function(twisst_object, span=0.05) {
+    l=list()
+    
+    l$topos <- twisst_object$topos
+    
+    l$n_datasets <- twisst_object$n_datasets
+    
+    l$weights <- list()
+    
+    l$pos <- list()
+    
+    for (i in 1:l$n_datasets){
+        if (is.null(twisst_object$window_data[[i]]$mid) == TRUE) {
+            mid <- (twisst_object$window_data[[i]]$start + twisst_object$window_data[[i]]$end)/2
+            }
+        else mid = twisst_object$window_data[[i]]$mid
+        
+        l$pos[[i]] <- seq(mid[1], tail(mid,1), tail(mid,1)*span*.1)
+        
+        l$weights[[i]] <- smooth.weights(mid, twisst_object$weights[[i]], new_x <- l$pos[[i]], span = span,
+                                         window_sites=twisst_object$window_data$sites[[i]])
+        }
+    l
+    }
+
+
+plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, show_weights=TRUE, datasets=NULL, ncol_weights=1,
+                        cols=topo_cols,xlim=NULL,stacked=TRUE, rel_height=3, tree_type="clad"){
+    
+    if (is.null(datasets)==TRUE) datasets <- 1:twisst_object$n_datasets
+    
+    n_topos <- length(twisst_object$topos)
+    
+    if (is.null(ncol_topos)) ncol_topos <- n_topos
+    
+    #if we have too few topologies to fill the spaces in the plot, we can pad in the remainder
+    topos_pad <- (n_topos * ncol_weights) %% (ncol_topos*ncol_weights) 
+    
+    topos_layout_matrix <- matrix(c(rep(1:n_topos, each=ncol_weights), rep(0, topos_pad)),
+                                  ncol=ncol_topos*ncol_weights, byrow=T)
+    
+    #if we have too few datasets to fill the spaces in the plot, we pad in the remainder
+    data_pad <- (length(datasets)*ncol_topos) %% (ncol_topos*ncol_weights)
+    
+    weights_layout_matrix <- matrix(c(rep(n_topos+(1:length(datasets)), each=ncol_topos),rep(0,data_pad)),
+                                    ncol=ncol_topos*ncol_weights, byrow=T)
+    
+    layout(rbind(topos_layout_matrix, weights_layout_matrix),
+           height=c(rep(1, nrow(topos_layout_matrix)), rep(rel_height, nrow(weights_layout_matrix))))
+    
+    par(mar=c(1,1,1,1))
+    
+    for (i in 1:n_topos){
+        plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
+                   edge.width=5, label.offset=.4, cex=1)
+        mtext(side=3,text=paste0("topo",i), cex=0.75)
+        }
+    
+    par(mar=c(4,4,2,2))
+    
+    for (j in datasets){
+        if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
+        else positions <- twisst_object$window_data[[j]][,c("start","end")]
+        plot.weights(twisst_object$weights[[j]], positions, fill_cols = cols, line_cols=NA,lwd=0, stacked=T)
+        }
+    }
+
+
+
+
