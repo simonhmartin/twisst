@@ -144,8 +144,8 @@ import.twisst <- function(weights_files, window_data_files, cleanup=TRUE){
         #attempt to retrieve topologies
     if ("package:ape" %in% search()){
         n_topos = ncol(l$weights[[1]])
-        if (file_ext(weights_file) == ".gz") cat="cat" else cat="zcat"
-        topos_text = system(paste(cat, weights_file, "| head -n", n_topos), intern = T)
+        if (file_ext(weights_files[[1]]) == ".gz") cat="cat" else cat="zcat"
+        topos_text = system(paste(cat, weights_files[[1]], "| head -n", n_topos), intern = T)
         l$topos <- read.tree(text = topos_text)
         }
     else l$topos = NULL
