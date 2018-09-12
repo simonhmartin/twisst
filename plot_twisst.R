@@ -222,5 +222,42 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, show_we
     }
 
 
+#function for plotting tree that uses ape to get node positions
+draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="right",
+                      edge_col="black", label_col="black", add_labels=TRUE, add_symbols=FALSE,
+                      label_offset = 1, symbol_offset=0, symbol_col="black",symbol_bg="NA",pch=19){
+
+    n_tips = length(phy$tip.label)
+
+    if (direction=="right") {
+        node_x = (node.depth(phy, method=method) - 1) * x_scale * -1
+        node_y = node.height(phy) * y_scale
+        label_x = node_x[1:n_tips] + label_offset
+        label_y = node_y[1:n_tips]
+        adj_x = 0
+        adj_y = .5
+        symbol_x = node_x[1:n_tips] + symbol_offset
+        symbol_y = node_y[1:n_tips]
+        }
+    if (direction=="down") {
+        node_y = (node.depth(phy, method=method) - 1) * y_scale * 1
+        node_x = node.height(phy) * x_scale
+        label_x = node_x[1:n_tips]
+        label_y = node_y[1:n_tips] - label_offset
+        adj_x = .5
+        adj_y = 1
+        symbol_x = node_x[1:n_tips]
+        symbol_y = node_y[1:n_tips] - symbol_offset
+        }
+    
+    #draw edges
+    segments(x + node_x[phy$edge[,1]], y + node_y[phy$edge[,1]],
+             x + node_x[phy$edge[,2]], y + node_y[phy$edge[,2]], col=edge_col)
+    
+    if (add_labels=="TRUE") text(x + label_x, y + label_y, col = label_col, labels=phy$tip.label, adj=c(adj_x,adj_y))
+    if (add_symbols=="TRUE") points(x + symbol_x, y + symbol_y, pch = pch, col=symbol_col, bg=symbol_bg)
+
+    }
+
 
 
