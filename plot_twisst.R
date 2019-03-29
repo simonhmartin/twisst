@@ -111,50 +111,73 @@ topo_cols <- c(
 "#94FFB5") #Jade
 
 
+
+
 ########### Below are some more object-oriented tools for working with standard twisst output files
 
 library(ape)
-
+library(data.table)
 library(tools)
 
 #a function that imports weights 
-import.twisst <- function(weights_files, window_data_files, cleanup=TRUE){
+import.twisst <- function(weights_files, window_data_files, topos_file=NULL, na.rm=TRUE, max_window=Inf,
+                          lengths=NULL, names=NULL){
     l = list()
-
+    
     l$n_datasets <- length(weights_files)
     
     l$weights_raw <- lapply(weights_files, read.table ,header=TRUE)
-        
-    l$weights <- sapply(l$weights_raw, function(raw) raw/apply(raw, 1, sum), simplify=F)
+    
+    l$weights <- sapply(l$weights_raw, function(raw) raw/apply(raw, 1, sum), simplify=FALSE)
+    
+    l$weights_mean <- lapply(l$weights, apply, 2, mean, na.rm=T)
+    
+    l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
     
     #get window_data if present
     l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
     
-    if (cleanup==TRUE){
+    if (is.null(lengths) == TRUE) l$lengths <- sapply(l$window_data, function(df) tail(df$end,1), simplify=FALSE)
+    else l$lengths = lengths
+    
+    if (na.rm==TRUE){
         for (i in 1:l$n_datasets){
             #remove rows containing NA values
-            good_rows = which(is.na(apply(l$weights[[i]],1,sum)) == F)
+            good_rows = which(is.na(apply(l$weights[[i]],1,sum)) == F &
+                              l$window_data[[i]]$end - l$window_data[[i]]$start + 1 <= max_window)
             l$weights[[i]] <- l$weights[[i]][good_rows,]
             l$window_data[[i]] = l$window_data[[i]][good_rows,]
             }
         }
+        
+    for (i in 1:length(l$window_data)) {
+        if (is.null(l$window_data[[i]]$mid) == TRUE) {
+            l$window_data[[i]]$mid <- (l$window_data[[i]]$start + l$window_data[[i]]$end)/2
+            }
+        }
     
-    l$pos = sapply(l$weights, function(w) 1:nrow(w))
+    l$pos=sapply(l$window_data, function(df) df$mid, simplify=FALSE)
     
-        #attempt to retrieve topologies
-    if ("package:ape" %in% search()){
+    #attempt to retrieve topologies
+    l$topos=NULL
+    #first, check if a topologies file is provided
+    if (is.null(topos_file) == FALSE) {
+        l$topos <- read.tree(file=topos_file)
+        if (is.null(names(l$topos)) == TRUE) names(l$topos) <- names(l$weights[[1]])
+        }
+    else{
+        #otherwise we try to retrieve topologies from the (first) weights file
         n_topos = ncol(l$weights[[1]])
         if (file_ext(weights_files[[1]]) == ".gz") cat="cat" else cat="zcat"
-        topos_text = system(paste(cat, weights_files[[1]], "| head -n", n_topos), intern = T)
-        l$topos <- read.tree(text = topos_text)
+        topos_text <- try(system(paste(cat, weights_files[[1]], "| head -n", n_topos), intern = T), TRUE)
+        try(l$topos <- read.tree(text = topos_text))
+        try(names(l$topos) <- sapply(names(l$topos), substring, 2))
         }
-    else l$topos = NULL
-    
     l
     }
 
 
-smooth.twisst <- function(twisst_object, span=0.05) {
+smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) {
     l=list()
     
     l$topos <- twisst_object$topos
@@ -163,69 +186,122 @@ smooth.twisst <- function(twisst_object, span=0.05) {
     
     l$weights <- list()
     
+    l$lengths = twisst_object$lengths
+
     l$pos <- list()
     
     for (i in 1:l$n_datasets){
-        if (is.null(twisst_object$window_data[[i]]$mid) == TRUE) {
-            mid <- (twisst_object$window_data[[i]]$start + twisst_object$window_data[[i]]$end)/2
-            }
-        else mid = twisst_object$window_data[[i]]$mid
+        if (is.null(span_bp) == FALSE) span <- span_bp/twisst_object$length[[i]]
         
-        l$pos[[i]] <- seq(mid[1], tail(mid,1), tail(mid,1)*span*.1)
+        if (is.null(spacing) == TRUE) spacing <- twisst_object$length[[i]]*span*.1
         
-        l$weights[[i]] <- smooth.weights(mid, twisst_object$weights[[i]], new_x <- l$pos[[i]], span = span,
+        l$pos[[i]] <- seq(twisst_object$pos[[i]][1], tail(twisst_object$pos[[i]],1), spacing)
+        
+        l$weights[[i]] <- smooth.weights(twisst_object$pos[[i]], twisst_object$weights[[i]], new_x <- l$pos[[i]], span = span,
                                          window_sites=twisst_object$window_data$sites[[i]])
         }
     l
     }
 
 
-plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, show_weights=TRUE, datasets=NULL, ncol_weights=1,
-                        cols=topo_cols,xlim=NULL,stacked=TRUE, rel_height=3, tree_type="clad"){
+plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, datasets=NULL, ncol_weights=1,
+                        cols=topo_cols,xlim=NULL,mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
+    
+    if (mode==3) {
+        stacked=TRUE
+        fill_cols = cols
+        line_cols = NA
+        lwd = 0
+        }
+    
+    if (mode==2) {
+        stacked=FALSE
+        fill_cols = paste0(cols,80)
+        line_cols = cols
+        lwd=par("lwd")
+        }
+    
+    if (mode==1) {
+        stacked=FALSE
+        fill_cols = NA
+        line_cols = cols
+        lwd=par("lwd")
+        }
     
     if (is.null(datasets)==TRUE) datasets <- 1:twisst_object$n_datasets
+            
+    if (concatenate == TRUE) ncol_weights <- 1
     
-    n_topos <- length(twisst_object$topos)
-    
-    if (is.null(ncol_topos)) ncol_topos <- n_topos
-    
-    #if we have too few topologies to fill the spaces in the plot, we can pad in the remainder
-    topos_pad <- (n_topos * ncol_weights) %% (ncol_topos*ncol_weights) 
-    
-    topos_layout_matrix <- matrix(c(rep(1:n_topos, each=ncol_weights), rep(0, topos_pad)),
-                                  ncol=ncol_topos*ncol_weights, byrow=T)
+    if (show_topos==TRUE){
+        n_topos <- length(twisst_object$topos)
+        
+        if (is.null(ncol_topos)) ncol_topos <- n_topos
+        
+        #if we have too few topologies to fill the spaces in the plot, we can pad in the remainder
+        topos_pad <- (n_topos * ncol_weights) %% (ncol_topos*ncol_weights) 
+        
+        topos_layout_matrix <- matrix(c(rep(1:n_topos, each=ncol_weights), rep(0, topos_pad)),
+                                    ncol=ncol_topos*ncol_weights, byrow=T)
+        }
+    else {
+        ncol_topos <- 1
+        n_topos <- 0
+        topos_layout_matrix <- matrix(NA, nrow= 0, ncol=ncol_topos*ncol_weights)
+        }
     
     #if we have too few datasets to fill the spaces in the plot, we pad in the remainder
     data_pad <- (length(datasets)*ncol_topos) %% (ncol_topos*ncol_weights)
     
-    weights_layout_matrix <- matrix(c(rep(n_topos+(1:length(datasets)), each=ncol_topos),rep(0,data_pad)),
-                                    ncol=ncol_topos*ncol_weights, byrow=T)
+    if (concatenate==TRUE) weights_layout_matrix <- matrix(rep(n_topos+1,ncol_topos), nrow=1)
+    else {
+        weights_layout_matrix <- matrix(c(rep(n_topos+(1:length(datasets)), each=ncol_topos),rep(0,data_pad)),
+                                        ncol=ncol_topos*ncol_weights, byrow=T)
+        }
     
     layout(rbind(topos_layout_matrix, weights_layout_matrix),
            height=c(rep(1, nrow(topos_layout_matrix)), rep(rel_height, nrow(weights_layout_matrix))))
     
-    par(mar=c(1,1,1,1))
-    
-    for (i in 1:n_topos){
-        plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
-                   edge.width=5, label.offset=.4, cex=1)
-        mtext(side=3,text=paste0("topo",i), cex=0.75)
+    if (show_topos == TRUE){
+        par(mar=c(1,1,1,1))
+        
+        for (i in 1:n_topos){
+            plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
+                    edge.width=5, label.offset=.4, cex=1)
+            mtext(side=3,text=paste0("topo",i), cex=0.75)
+            }
         }
     
     par(mar=c(4,4,2,2))
     
-    for (j in datasets){
-        if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
-        else positions <- twisst_object$window_data[[j]][,c("start","end")]
-        plot.weights(twisst_object$weights[[j]], positions, fill_cols = cols, line_cols=NA,lwd=0, stacked=T)
+    if (concatenate == TRUE) {
+        chrom_offsets = cumsum(twisst_object$lengths + gap) - (twisst_object$lengths + gap)
+        chrom_ends <- chrom_offsets + twisst_object$lengths
+        
+        plot(0, pch = "",xlim = c(chrom_offsets[1],tail(chrom_ends,1)), ylim = c(0,1),
+        ylab = "", yaxt = "n", xlab = "", xaxt = "n", bty = "n", main = "")
+        
+        for (j in datasets) {
+            if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
+            else positions <- twisst_object$window_data[[j]][,c("start","end")] + chrom_offsets[j]
+            plot.weights(twisst_object$weights[[j]], positions,
+                         fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked, add=T)
+            }
+        }
+    else{
+        for (j in datasets){
+            if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
+            else positions <- twisst_object$window_data[[j]][,c("start","end")]
+            plot.weights(twisst_object$weights[[j]], positions, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
+            }
         }
     }
 
 
 #function for plotting tree that uses ape to get node positions
 draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="right",
-                      edge_col="black", label_col="black", add_labels=TRUE, add_symbols=FALSE,
-                      label_offset = 1, symbol_offset=0, symbol_col="black",symbol_bg="NA",pch=19){
+                      col="black", col.label="black", add_labels=TRUE, add_symbols=FALSE,
+                      label_offset = 1, symbol_offset=0, col.symbol="black",symbol_bg="NA",
+                      pch=19, cex=NULL, lwd=NULL){
 
     n_tips = length(phy$tip.label)
 
@@ -252,12 +328,46 @@ draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="righ
     
     #draw edges
     segments(x + node_x[phy$edge[,1]], y + node_y[phy$edge[,1]],
-             x + node_x[phy$edge[,2]], y + node_y[phy$edge[,2]], col=edge_col)
+             x + node_x[phy$edge[,2]], y + node_y[phy$edge[,2]], col=col, lwd=lwd)
     
-    if (add_labels=="TRUE") text(x + label_x, y + label_y, col = label_col, labels=phy$tip.label, adj=c(adj_x,adj_y))
-    if (add_symbols=="TRUE") points(x + symbol_x, y + symbol_y, pch = pch, col=symbol_col, bg=symbol_bg)
+    if (add_labels=="TRUE") text(x + label_x, y + label_y, col = col.label, labels=phy$tip.label, adj=c(adj_x,adj_y),cex=cex)
+    if (add_symbols=="TRUE") points(x + symbol_x, y + symbol_y, pch = pch, col=col.symbol, bg=symbol_bg)
 
     }
 
 
+#code for plotting a summary barplot
+plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, cols=topo_cols,
+                                x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
+                                label_offset = 0.05, lwd=NULL, cex=NULL){
+    
+    N = length(twisst_object$topos)
+    # Either order 1-15 or order with highest weigted topology first
+    
+    if (order_by_weights == TRUE) ord <- order(twisst_object$weights_overall_mean, decreasing=T)
+    else ord <- 1:N
+
+    #set the plot layout, with the tree panel one third the height of the barplot panel
+    layout(matrix(c(2,1)), heights=c(1,3))
+    
+    par(mar = c(1,4,.5,1))
+    
+    #make the barplot
+    x=barplot(twisst_object$weights_overall_mean[ord], col = cols[ord],
+            xaxt="n", las=1, ylab="Average weighting", space = 0.2, xlim = c(0.2, 1.2*N))
+
+    #draw the trees
+    #first make an empty plot for the trees. Ensure left and right marhins are the same
+    par(mar=c(0,4,0,1))
+    plot(0,cex=0,xlim = c(0.2, 1.2*N), xaxt="n",yaxt="n",xlab="",ylab="",ylim=c(0,1), bty="n")
+    
+    #now run the draw.tree function for each topology. You can set x_scale and y_scale to alter the tree width and height.
+    for (i in 1:length(ord)){
+        draw.tree(twisst_object$topos[[ord[i]]], x=x[i]+.2, y=0, x_scale=x_scale, y_scale=y_scale,
+                col=cols[ord[i]], label_offset=label_offset, cex=cex, lwd=lwd)
+        }
+    
+    #add labels for each topology
+    text(x,.9,names(twisst_object$topos)[ord],col=cols[ord])
+    }
 

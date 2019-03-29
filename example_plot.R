@@ -1,136 +1,108 @@
 
+################################# overview #####################################
+
+# The main data produced by Twisst is a weights file which has columns for each
+# topology and their number of observations of that topology within each
+# genealogy. Weights files produced by Twisst also contain initial comment lines
+# speficying the topologies.
+
+# The other data file that may be of interest is the window data. That is, the
+# chromosome/scaffold and start and end positions for each of the regions or
+# windows represented in the weights file.
+
+# Both of the above files can be read into R, manipulated and plotted however
+# you like, but I have written some functions to make these tasks easier.
+# These functions are provided in the script plot_twisst.R
+
+################### load helpful plotting functions #############################
+
 source("plot_twisst.R")
 
-########### input data ################
+############################## input files ######################################
+
+# It is possible to import one or more weights files at a time.
+# Here we just import 1
 
 #weights file with a column for each topology
-weights_file <- "examples/msms_4of10_l1Mb_r10k.seq_gen.SNP.w50sites.phyml_bionj.weights.tsv"
+weights_file <- "examples/msms_4of10_l1Mb_r10k_sweep.seq_gen.SNP.w50sites.phyml_bionj.weights.tsv.gz"
+
+
+# It is not necessary to import window data files, but if you do there should be one for
+# each weights file
 
 #coordinates file for each window
-window_data_file <- "examples/msms_4of10_l1Mb_r10k.seq_gen.SNP.w50sites.phyml_bionj.data.tsv"
+window_data_file <- "examples/msms_4of10_l1Mb_r10k_sweep.seq_gen.SNP.w50sites.phyml_bionj.data.tsv.gz"
 
 
-########## read data ##################
-weights = read.table(weights_file, header = T)
-#normalise rows so weights sum to 1
-weights <- weights / apply(weights, 1, sum)
-#retrieve the names of the topologies
-topoNames = names(weights)
+################################# import data ##################################
 
-window_data = read.table(window_data_file, header = T)
+# The function import.twisst reads the weights, window data  files into a list object
 
-#exclude any rows where data is missing
-good_rows = which(is.na(apply(weights,1,sum)) == F)
-weights <- weights[good_rows,]
-window_data = window_data[good_rows,]
+twisst_data <- import.twisst(weights_files=weights_file,
+                             window_data_files=window_data_file)
 
 
-########### choose colours for plot ########
-#some nice contrasted colours. These are from https://en.wikipedia.org/wiki/Help:Distinguishable_colors
-cols = c(
-"#F0A3FF", #Amethyst
-"#0075DC", #Blue
-"#993F00", #Caramel
-"#4C005C", #Damson
-"#191919", #Ebony
-"#005C31", #Forest
-"#2BCE48", #Green
-"#FFCC99", #Honeydew
-"#808080", #Iron
-"#94FFB5", #Jade
-"#8F7C00", #Khaki
-"#9DCC00", #Lime
-"#C20088", #Mallow
-"#003380", #Navy
-"#FFA405", #Orpiment
-"#FFA8BB", #Pink
-"#426600", #Quagmire
-"#FF0010", #Red
-"#5EF1F2", #Sky
-"#00998F", #Turquoise
-"#E0FF66", #Uranium
-"#740AFF", #Violet
-"#990000", #Wine
-"#FFFF80", #Xanthin
-"#FFFF00", #Yellow
-"#FF5005" #Zinnia
-)
+############################## combined plots ##################################
+# there are a functions available to plot both the weightings and the topologies
 
-#semi-transparent version of each colour
-trans_cols = paste0(cols, "25")
+#a summary plot shows all the topologies and a bar plot of their relative weightings
+plot.twisst.summary(twisst_data, lwd=3, cex=0.7)
 
-######### plot raw data #######
+
+#or plot ALL the data across the chromosome(s)
+#Note, this is not recommended if there are large numbers of windows.
+# instead, it is recommended to first smooth the weghtings and plot the smoothed values
+plot.twisst(twisst_data, mode=1, show_topos=TRUE)
+
+
+# make smooth weightings and plot those across chromosomes
+twisst_data_smooth <- smooth.twisst(twisst_data, span_bp = 20000, spacing = 1000)
+plot.twisst(twisst_data_smooth, mode=2) #mode 2 overlays polygons, mode 3 would stack them
+
+
+##################### individual plots: raw weights ############################
 
 #plot raw data in "stepped" style, with polygons stacked.
 #specify stepped style by providing a matrix of starts and ends for positions
-pdf(file = paste0("examples/example.raw.stepped.stacked.pdf"), width = 10, height = 4)
-par(mar = c(4,4,1,1))
-plot.weights(weights_dataframe=weights, positions=cbind(window_data$start,window_data$end),
-             line_cols=cols, fill_cols=cols, xlim =c(1,1000000),stacked=TRUE)
-dev.off()
+par(mfrow = c(1,1), mar = c(4,4,1,1))
+plot.weights(weights_dataframe=twisst_data$weights[[1]], positions=twisst_data$window_data[[1]][,c("start","end")],
+             line_cols=topo_cols, fill_cols=topo_cols, stacked=TRUE)
 
 #plot raw data in stepped style, with polygons unstacked (stacked =FLASE)
 #use semi-transparent colours for fill
-pdf(file = paste0("examples/example.raw.stepped.unstacked.pdf"), width = 10, height = 4)
-par(mar = c(4,4,1,1))
-plot.weights(weights_dataframe=weights, positions=cbind(window_data$start,window_data$end),
-             line_cols=cols, fill_cols=trans_cols, xlim =c(1,1000000),stacked=FALSE)
-dev.off()
+plot.weights(weights_dataframe=twisst_data$weights[[1]], positions=twisst_data$window_data[[1]][,c("start","end")],
+             line_cols=topo_cols, fill_cols=paste0(topo_cols,80), stacked=FALSE)
 
-#plot raw data against window midpoints, with polygons unstacked.
-#specify midpoint style by providing a single vector of midpoints for positions
-pdf(file = paste0("examples/example.raw.midpoints.unstacked.pdf"), width = 10, height = 4)
-par(mar = c(4,4,1,1))
-plot.weights(weights_dataframe=weights, positions=window_data$mid,
-             line_cols=cols, fill_cols=trans_cols, xlim =c(1,1000000),stacked=FALSE)
-dev.off()
 
-################ plot smoothed data ######
-#use loess to smooth weights.
-weights_smooth = smooth.weights(window_positions=window_data$mid, weights_dataframe = weights,
-                                 span = 0.01, window_sites=window_data$sites)
+#################### individual plots: smoothed weights ########################
 
 #plot smoothed data with polygons stacked
-pdf(file = paste0("examples/example.smooth.stacked.pdf"), width = 10, height = 4)
-par(mar = c(4,4,1,1))
-plot.weights(weights_dataframe=weights_smooth, positions=window_data$mid,
-             line_cols=cols, fill_cols=cols, xlim =c(1,1000000),stacked=TRUE)
-dev.off()
+plot.weights(weights_dataframe=twisst_data_smooth$weights[[1]], positions=twisst_data_smooth$pos[[1]],
+             line_cols=topo_cols, fill_cols=topo_cols, stacked=TRUE)
 
 #plot smoothed data with polygons unstacked
-pdf(file = paste0("examples/example.smooth.unstacked.pdf"), width = 10, height = 4)
-par(mar = c(4,4,1,1))
-plot.weights(weights_dataframe=weights_smooth, positions=window_data$mid,
-             line_cols=cols, fill_cols=trans_cols, xlim =c(1,1000000),stacked=FALSE)
-dev.off()
+plot.weights(weights_dataframe=twisst_data_smooth$weights[[1]], positions=twisst_data_smooth$pos[[1]],
+             line_cols=topo_cols, fill_cols=paste0(topo_cols,80), stacked=FALSE)
 
 
 
-################ plot topologies #########
-
-library(ape)
-
-topos = read.tree(file="examples/4.topos")
-
+########################### plot topologies using Ape ##########################
 #unrooted trees
+for (i in 1:length(twisst_data$topos)) twisst_data$topos[[i]] <- ladderize(unroot(twisst_data$topos[[i]]))
 
-pdf(file = paste0("examples/example.topos.unrooted.pdf"), width = 5, height = 2)
-par(mfrow = c(1,3), mar = c(1,1,2,1), xpd=NA)
-for (n in 1:length(topos)){
-  plot.phylo(topos[[n]], type = "unrooted", edge.color=cols[n], edge.width=5, cex = 1, rotate.tree=90, adj = .5, label.offset=.2)
+par(mfrow = c(1,length(twisst_data$topos)), mar = c(1,1,2,1), xpd=NA)
+for (n in 1:length(twisst_data$topos)){
+  plot.phylo(twisst_data$topos[[n]], type = "unrooted", edge.color=topo_cols[n], edge.width=5, rotate.tree = 90, cex = 1, adj = .5, label.offset=.2)
   mtext(side=3,text=paste0("topo",n))
   }
-dev.off()
 
 
-#root trees
-for (i in 1:length(topos)) topos[[i]] <- root(topos[[i]], "D", resolve.root = T)
+#rooted topologies
+for (i in 1:length(twisst_data$topos)) twisst_data$topos[[i]] <- root(twisst_data$topos[[i]], "D", resolve.root = T)
 
-pdf(file = paste0("examples/example.topos.rooted.pdf"), width = 5, height = 2)
-par(mfrow = c(1,3), mar = c(1,1,2,1), xpd=NA)
-for (n in 1:length(topos)){
-  plot.phylo(topos[[n]], type = "clad", edge.color=cols[n], edge.width=5, label.offset=.1, cex = 1)
+par(mfrow = c(1,length(twisst_data$topos)), mar = c(1,1,2,1), xpd=NA)
+for (n in 1:length(twisst_data$topos)){
+  plot.phylo(twisst_data$topos[[n]], type = "clad", edge.color=topo_cols[n], edge.width=5, label.offset=.1, cex = 1)
   mtext(side=3,text=paste0("topo",n))
   }
-dev.off()
 
