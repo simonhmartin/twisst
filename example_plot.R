@@ -37,6 +37,8 @@ window_data_file <- "examples/msms_4of10_l1Mb_r10k_sweep.seq_gen.SNP.w50sites.ph
 ################################# import data ##################################
 
 # The function import.twisst reads the weights, window data  files into a list object
+# If there are multiple weights files, or a single file with different chromosomes/scaffolds/contigs
+# in the window data file, these will be separated when importing.
 
 twisst_data <- import.twisst(weights_files=weights_file,
                              window_data_files=window_data_file)

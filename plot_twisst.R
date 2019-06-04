@@ -120,38 +120,64 @@ library(data.table)
 library(tools)
 
 #a function that imports weights 
-import.twisst <- function(weights_files, window_data_files, topos_file=NULL, na.rm=TRUE, max_window=Inf,
-                          lengths=NULL, names=NULL){
+import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=TRUE, order_by_start=TRUE, na.rm=TRUE, max_window=Inf,
+                          lengths=NULL, topos_file=NULL, recalculate_mid=FALSE){
     l = list()
     
-    l$n_datasets <- length(weights_files)
+    if (length(window_data_files) > 1){
+        l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
+        l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
+        }
     
-    l$weights_raw <- lapply(weights_files, read.table ,header=TRUE)
+    if (length(window_data_files) == 1){
+        l$window_data <- read.table(window_data_files, header=TRUE)
+        l$weights_raw <- read.table(weights_files, header=TRUE)
+        if (split_by_chrom == TRUE){
+            l$weights_raw <- split(l$weights_raw, l$window_data[,1])
+            l$window_data <- split(l$window_data, l$window_data[,1])
+            }
+        }
+    
+    if (is.null(window_data_files) == TRUE) {
+        l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
+        n <- nrow(l$weights_raw[[1]])
+        l$window_data <- list(data.frame(chrom=rep(0,n), start=1:n, end=1:n))
+        }
+    
+    l$n_regions <- length(l$weights_raw)
+    
+    if (is.null(names(l$window_data)) == TRUE) {
+        names(l$window_data) <- names(l$weights_raw) <- paste0("region", 1:l$n_regions)
+        }
+    
+    if (order_by_start==TRUE & is.null(window_data_files) == FALSE){
+        orders = sapply(l$window_data, function(df) order(df[,2]), simplify=FALSE)
+        l$window_data <- sapply(names(orders), function(x) l$window_data[[x]][orders[[x]],], simplify=F)
+        l$weights_raw <- sapply(names(orders), function(x) l$weights_raw[[x]][orders[[x]],], simplify=F)
+        }
     
     l$weights <- sapply(l$weights_raw, function(raw) raw/apply(raw, 1, sum), simplify=FALSE)
-    
+        
     l$weights_mean <- lapply(l$weights, apply, 2, mean, na.rm=T)
     
     l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
-    
-    #get window_data if present
-    l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
     
     if (is.null(lengths) == TRUE) l$lengths <- sapply(l$window_data, function(df) tail(df$end,1), simplify=FALSE)
     else l$lengths = lengths
     
     if (na.rm==TRUE){
-        for (i in 1:l$n_datasets){
+        for (i in 1:l$n_regions){
             #remove rows containing NA values
             good_rows = which(is.na(apply(l$weights[[i]],1,sum)) == F &
                               l$window_data[[i]]$end - l$window_data[[i]]$start + 1 <= max_window)
             l$weights[[i]] <- l$weights[[i]][good_rows,]
+            l$weights_raw[[i]] <- l$weights[[i]][good_rows,]
             l$window_data[[i]] = l$window_data[[i]][good_rows,]
             }
         }
-        
+    
     for (i in 1:length(l$window_data)) {
-        if (is.null(l$window_data[[i]]$mid) == TRUE) {
+        if (is.null(l$window_data[[i]]$mid) == TRUE | recalculate_mid == TRUE) {
             l$window_data[[i]]$mid <- (l$window_data[[i]]$start + l$window_data[[i]]$end)/2
             }
         }
@@ -168,7 +194,7 @@ import.twisst <- function(weights_files, window_data_files, topos_file=NULL, na.
     else{
         #otherwise we try to retrieve topologies from the (first) weights file
         n_topos = ncol(l$weights[[1]])
-        if (file_ext(weights_files[[1]]) == ".gz") cat="cat" else cat="zcat"
+        if (file_ext(weights_files[1]) == ".gz") cat="zcat" else cat="cat"
         topos_text <- try(system(paste(cat, weights_files[[1]], "| head -n", n_topos), intern = T), TRUE)
         try(l$topos <- read.tree(text = topos_text))
         try(names(l$topos) <- sapply(names(l$topos), substring, 2))
@@ -182,7 +208,7 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
     
     l$topos <- twisst_object$topos
     
-    l$n_datasets <- twisst_object$n_datasets
+    l$n_regions <- twisst_object$n_regions
     
     l$weights <- list()
     
@@ -190,7 +216,7 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
 
     l$pos <- list()
     
-    for (i in 1:l$n_datasets){
+    for (i in 1:l$n_regions){
         if (is.null(span_bp) == FALSE) span <- span_bp/twisst_object$length[[i]]
         
         if (is.null(spacing) == TRUE) spacing <- twisst_object$length[[i]]*span*.1
@@ -204,8 +230,8 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
     }
 
 
-plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, datasets=NULL, ncol_weights=1,
-                        cols=topo_cols,xlim=NULL,mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
+plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions=NULL, ncol_weights=1,
+                        cols=topo_cols,xlim=NULL, mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
     
     if (mode==3) {
         stacked=TRUE
@@ -228,7 +254,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, dataset
         lwd=par("lwd")
         }
     
-    if (is.null(datasets)==TRUE) datasets <- 1:twisst_object$n_datasets
+    if (is.null(regions)==TRUE) regions <- 1:twisst_object$n_regions
             
     if (concatenate == TRUE) ncol_weights <- 1
     
@@ -249,12 +275,12 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, dataset
         topos_layout_matrix <- matrix(NA, nrow= 0, ncol=ncol_topos*ncol_weights)
         }
     
-    #if we have too few datasets to fill the spaces in the plot, we pad in the remainder
-    data_pad <- (length(datasets)*ncol_topos) %% (ncol_topos*ncol_weights)
+    #if we have too few regions to fill the spaces in the plot, we pad in the remainder
+    data_pad <- (length(regions)*ncol_topos) %% (ncol_topos*ncol_weights)
     
     if (concatenate==TRUE) weights_layout_matrix <- matrix(rep(n_topos+1,ncol_topos), nrow=1)
     else {
-        weights_layout_matrix <- matrix(c(rep(n_topos+(1:length(datasets)), each=ncol_topos),rep(0,data_pad)),
+        weights_layout_matrix <- matrix(c(rep(n_topos+(1:length(regions)), each=ncol_topos),rep(0,data_pad)),
                                         ncol=ncol_topos*ncol_weights, byrow=T)
         }
     
@@ -280,7 +306,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, dataset
         plot(0, pch = "",xlim = c(chrom_offsets[1],tail(chrom_ends,1)), ylim = c(0,1),
         ylab = "", yaxt = "n", xlab = "", xaxt = "n", bty = "n", main = "")
         
-        for (j in datasets) {
+        for (j in regions) {
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
             else positions <- twisst_object$window_data[[j]][,c("start","end")] + chrom_offsets[j]
             plot.weights(twisst_object$weights[[j]], positions,
@@ -288,7 +314,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, dataset
             }
         }
     else{
-        for (j in datasets){
+        for (j in regions){
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$window_data[[j]][,c("start","end")]
             plot.weights(twisst_object$weights[[j]], positions, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
@@ -337,16 +363,20 @@ draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="righ
 
 
 #code for plotting a summary barplot
-plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, cols=topo_cols,
+plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, cols=topo_cols,
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
                                 label_offset = 0.05, lwd=NULL, cex=NULL){
     
-    N = length(twisst_object$topos)
     # Either order 1-15 or order with highest weigted topology first
     
-    if (order_by_weights == TRUE) ord <- order(twisst_object$weights_overall_mean, decreasing=T)
-    else ord <- 1:N
-
+    if (order_by_weights == TRUE) {
+        ord <- order(twisst_object$weights_overall_mean, decreasing=T)
+        if (is.null(only_best) == FALSE) ord=ord[1:only_best]
+        }
+    else ord <- 1:length(twisst_object$topos)
+    
+    N=length(ord)
+    
     #set the plot layout, with the tree panel one third the height of the barplot panel
     layout(matrix(c(2,1)), heights=c(1,3))
     
@@ -355,7 +385,7 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, cols=topo_
     #make the barplot
     x=barplot(twisst_object$weights_overall_mean[ord], col = cols[ord],
             xaxt="n", las=1, ylab="Average weighting", space = 0.2, xlim = c(0.2, 1.2*N))
-
+    
     #draw the trees
     #first make an empty plot for the trees. Ensure left and right marhins are the same
     par(mar=c(0,4,0,1))
