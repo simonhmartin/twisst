@@ -309,7 +309,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions) {
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
             else positions <- twisst_object$window_data[[j]][,c("start","end")] + chrom_offsets[j]
-            plot.weights(twisst_object$weights[[j]], positions,
+            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim,
                          fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked, add=T)
             }
         }
@@ -317,7 +317,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions){
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$window_data[[j]][,c("start","end")]
-            plot.weights(twisst_object$weights[[j]], positions, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
+            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
             }
         }
     }
@@ -385,7 +385,7 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
     #make the barplot
     x=barplot(twisst_object$weights_overall_mean[ord], col = cols[ord],
             xaxt="n", las=1, ylab="Average weighting", space = 0.2, xlim = c(0.2, 1.2*N))
-    
+
     #draw the trees
     #first make an empty plot for the trees. Ensure left and right marhins are the same
     par(mar=c(0,4,0,1))
