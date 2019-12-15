@@ -231,7 +231,7 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
 
 
 plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions=NULL, ncol_weights=1,
-                        cols=topo_cols,xlim=NULL, mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
+                        cols=topo_cols,xlim=NULL, ylim=NULL, mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
     
     if (mode==3) {
         stacked=TRUE
@@ -297,14 +297,16 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
             }
         }
     
+    if (is.null(ylim)==TRUE) ylim <- c(0,1)
+    
     par(mar=c(4,4,2,2))
     
     if (concatenate == TRUE) {
         chrom_offsets = cumsum(twisst_object$lengths + gap) - (twisst_object$lengths + gap)
         chrom_ends <- chrom_offsets + twisst_object$lengths
         
-        plot(0, pch = "",xlim = c(chrom_offsets[1],tail(chrom_ends,1)), ylim = c(0,1),
-        ylab = "", yaxt = "n", xlab = "", xaxt = "n", bty = "n", main = "")
+        plot(0, pch = "",xlim = c(chrom_offsets[1],tail(chrom_ends,1)), ylim = ylim,
+             ylab = "", yaxt = "n", xlab = "", xaxt = "n", bty = "n", main = "")
         
         for (j in regions) {
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
@@ -317,7 +319,8 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions){
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$window_data[[j]][,c("start","end")]
-            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim, fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
+            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim, ylim = ylim,
+                         fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
             }
         }
     }
@@ -327,7 +330,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
 draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="right",
                       col="black", col.label="black", add_labels=TRUE, add_symbols=FALSE,
                       label_offset = 1, symbol_offset=0, col.symbol="black",symbol_bg="NA",
-                      pch=19, cex=NULL, lwd=NULL){
+                      pch=19, cex=NULL, lwd=NULL, label_alias=NULL){
 
     n_tips = length(phy$tip.label)
 
@@ -356,7 +359,10 @@ draw.tree <- function(phy, x, y, x_scale=1, y_scale=1, method=1, direction="righ
     segments(x + node_x[phy$edge[,1]], y + node_y[phy$edge[,1]],
              x + node_x[phy$edge[,2]], y + node_y[phy$edge[,2]], col=col, lwd=lwd)
     
-    if (add_labels=="TRUE") text(x + label_x, y + label_y, col = col.label, labels=phy$tip.label, adj=c(adj_x,adj_y),cex=cex)
+    if (is.null(label_alias) == FALSE) tip_labels <- label_alias[phy$tip.label]
+    else tip_labels <- phy$tip.label
+    
+    if (add_labels=="TRUE") text(x + label_x, y + label_y, col = col.label, labels=tip_labels, adj=c(adj_x,adj_y),cex=cex)
     if (add_symbols=="TRUE") points(x + symbol_x, y + symbol_y, pch = pch, col=col.symbol, bg=symbol_bg)
 
     }
@@ -399,5 +405,47 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
     
     #add labels for each topology
     text(x,.9,names(twisst_object$topos)[ord],col=cols[ord])
+    }
+
+
+#code for plotting a summary boxplot
+plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, cols=topo_cols,
+                                x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
+                                label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
+    
+    # Either order 1-15 or order with highest weigted topology first
+    
+    if (order_by_weights == TRUE) {
+        ord <- order(twisst_object$weights_overall_mean, decreasing=T)
+        if (is.null(only_best) == FALSE) ord=ord[1:only_best]
+        }
+    else ord <- 1:length(twisst_object$topos)
+    
+    N=length(ord)
+    
+    #set the plot layout, with the tree panel one third the height of the barplot panel
+    layout(matrix(c(2,1)), heights=c(1,3))
+    
+    par(mar = c(1,4,.5,1))
+    
+    #make the barplot
+    boxplot(as.data.frame(rbindlist(twisst_object$weights))[,ord], col = cols[ord],
+            xaxt="n", las=1, xlim = c(.5, N+.5), ylab="Average weighting", cex=cex.outline, lwd=lwd.box)
+        
+    #draw the trees
+    #first make an empty plot for the trees. Ensure left and right marhins are the same
+    par(mar=c(0,4,0,1))
+    plot(0,cex=0, xlim = c(.5, N+.5), xaxt="n",yaxt="n",xlab="",ylab="",ylim=c(0,1), bty="n")
+    
+    #now run the draw.tree function for each topology. You can set x_scale and y_scale to alter the tree width and height.
+    for (i in 1:N){
+        draw.tree(twisst_object$topos[[ord[i]]], i+.1, y=0, x_scale=x_scale, y_scale=y_scale,
+                col=cols[ord[i]], label_offset=label_offset, cex=cex, lwd=lwd, label_alias=label_alias)
+        }
+    
+    if (is.null(topo_names)==TRUE) topo_names <- names(twisst_object$topos)
+    
+    #add labels for each topology
+    text(1:N,.9,topo_names[ord],col=cols[ord])
     }
 
