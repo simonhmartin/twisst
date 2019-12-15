@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-    #args = parser.parse_args("-n 5 -t test.trees -o test.topos.txt -w test.weights.B.csv -g A a,b,c -g B d,e,f -g C g,h,i -g D j,k,l".split())
+    #args = parser.parse_args("-t examples/msms_4of10_l1Mb_r10k_sweep.seq_gen.SNP.w50sites.phyml_bionj.trees.gz  -g A 1,2,3,4,5,6,7,8,9,10 -g B 11,12,13,14,15,16,17,18,19,20 -g C 21,22,23,24,25,26,27,28,29,30 -g D 31,32,33,34,35,36,37,38,39,40 --method complete > test.weights".split())
 
     getDists  = args.distsFile is not None
     getLengths = args.lengthsFile is not None
@@ -732,7 +732,7 @@ if __name__ == "__main__":
             #remove unneccesary leaves (speeds up downstream steps)
             leafNamesSet = set([leaf.name for leaf in tree.get_leaves()])
             if namesSet != leafNamesSet:
-                assert namesSet.issubset(leafNamesSet), "Named samples not present in tree."
+                assert namesSet.issubset(leafNamesSet), "Named samples not present in tree:" + " ".join(list(namesSet.difference(leafNamesSet)))
                 tree = getPrunedCopy(tree, leavesToKeep=names, preserve_branch_length=True)
             
             #root if necessary
