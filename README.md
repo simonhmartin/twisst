@@ -27,7 +27,7 @@ This code implements the method *Twisst* (topology weighting by iterative sampli
 
 The main script, `twisst.py` implements the topology weighting.
 
-It requires Pythion 2.7 and the libraries [`ete3`](http://etetoolkit.org/download/) and `numpy` (tested on version 1.8).
+It requires [`ete3`](http://etetoolkit.org/download/) and `numpy` (tested on version 1.8).
 
 A typical command looks like this:
 
@@ -37,7 +37,7 @@ python twisst.py -t input.trees.gz -w output.weights.csv.gz -g A 1,2,3,4,5 -g B 
 
 You can get a full list ot command options with `python twisst.py -h`.
 
-The script `run_twisst_parallel.py` allows parallelisation using python `multiprocessing`. It requires `twisst.py` to be present in the same directory or in your python path. The command line is the same, except that a number of threads must be specifies with the `-T` flag. The parallel version offers considerable speedups if the trees are large and complex, but little improvement (or even a slowdown) for small, simple trees that can be analysed very rapidly. 
+**NOTE** Due to ongoing improvements, the script `run_twisst_parallel.py` is currently not working. However, the speed improvements to the core script make it usable even for quite large data sets.
 
 ---
 
