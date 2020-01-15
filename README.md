@@ -32,7 +32,7 @@ It requires Pythion 2.7 and the libraries [`ete3`](http://etetoolkit.org/downloa
 A typical command looks like this:
 
 ```bash
-python twisst.py -t input.trees.gz -w output.weights.csv.gz -g A 1,2,3,4,5 -g B 6,7,8,9,10 -g C 11,12,13,14,15 -g D 16,17,18,19,20 --method complete
+python twisst.py -t input.trees.gz -w output.weights.csv.gz -g A 1,2,3,4,5 -g B 6,7,8,9,10 -g C 11,12,13,14,15 -g D 16,17,18,19,20
 ```
 
 You can get a full list ot command options with `python twisst.py -h`.
@@ -105,12 +105,12 @@ Where groups.tsv is a text file containing the following:
 
 There are three options for the weighting method, specified with the `--method` flag.
 
-The recommended method is `complete`. This will calculate the exact weightings by considering all subtrees. It performs a smart shortcut by collapsing monophyletic nodes, and can be quite fast if the taxa are well resolved and/or the tree is small. However, if the taxa are unresolved and the tree is large, this method may be too slow to be useful.
-If there are too many combinations to test (default > 100000), the script will abort and try one of the two approximate methods described below. You can control this behaviour using the `--abortCutoff` and `--backupMethod` flags. Note, `complete` is currently not the default method, and must be specified explicitly.
+The default method is `complete`. This will calculate the exact weightings by considering all subtrees. It performs a smart shortcut by collapsing monophyletic nodes, and can be quite fast if the taxa are well resolved and/or the tree is small. However, if the taxa are unresolved and the tree is large, this method may be too slow to be useful.
+If there are too many combinations to test (default > 1,000,000), the script will abort and revert to the `fixed` method described below. You can control this behaviour using the `--abortCutoff` option.
 
-The default method is `fixed`. This estimates the weightings by randomly sampling a fixed number of subtrees. Sampling is done with replacement, so that the errors will fit a simple binomial distribution. The default number of iterations is 400, which gives fairly narrow error margins, but this can be modified using the `--iterations` flag. One issue with this method is that the confidence in the weightings will be much higher for some trees than others, because of the nature of the binomial distribution. For example, if there are three possible topologies that occur at frequencies 400, 0 and 0, respectively, we can be highly confident of their weightings. But if they occur at frequencies of 120, 130 and 150, we have less certainty of their exact weightings. In other words, to get a certain level of confidence, some trees need less sampling than others. For this reason, the threshold sampling option is recommended over this one.
+`--method fixed` will cause the script to estimates the weightings by randomly sampling a fixed number of subtrees. Sampling is done with replacement, so that the errors will fit a simple binomial distribution. The default number of iterations is 10,000, which gives very narrow error margins, but this can be modified using the `--iterations` flag.
 
-The third option is `threshold`. This is similar to the sampling method above, except that the sampling is repeated until a certain dynamic threshold is reached. After *n* iterations, each topology must have been observed **fewer** than *k* times OR **more** than *n-k* times, with combinations of *n* and *k* being specified by the user. This allows specification of a unique threshold dependng on the number of iterations (*n*) and the number of observations (*k*). For example, you can set the thresholds such that the 95% binomial confidence interval around each weighting is less than 5%. Thresholds must be specified in a file, using the flag `--thresholdTable`. The file gives iterations (*n*) in the first column and the threshold number of observations (*k*) in the second column. If tyhe particular *n* has no acceptible *k* (often the case for low *n*), then *k* of -1 can be specified. Two example threshold tables are provided. These give thresholds to ensure that the 95% CI (Calculated using the "Wilson" method) is less than 5% or 10%.
+The original version of `twisst` had an option to keep sampling until some level of confidence was reached. However, with speed improvements, sampling of thousands of combinations is achievable and the error margins become tiny and essentially irellevant. There is a supplementary figure in [Martin and Van Belleghem 2017](http://doi.org/10.1534/genetics.116.194720) demonstrating this.
 
 ### Pipeline to generate the input trees file
 
@@ -144,7 +144,7 @@ java -Xmx12g -jar beagle.jar gt=input.vcf.gz out=output.vcf.gz impute=true nthre
 * My script to generate the trees takes a simple genotype format as input, which gives the scaffold, position and genotype for each sample. My code to generate this file from a vcf is in my repo [genomics_general](https://github.com/simonhmartin/genomics_general). Here is an example command:
 
 ```bash
-python parseVCF.py -i input.vcf.gz --skipIndel --minQual 30 --gtf flag=DP min=5 | gzip > output.geno.gz
+python parseVCF.py -i input.vcf.gz --skipIndels --minQual 30 --gtf flag=DP min=5 | gzip > output.geno.gz
 ```
 
 * To get neighbour joining trees for snp windows, I have a script that runs [Phyml](http://www.atgc-montpellier.fr/phyml/) for windows, using parallelisation, and outputs a single trees file. You can get the script from my [genomics_general](https://github.com/simonhmartin/genomics_general) repo. Here is an example command:
