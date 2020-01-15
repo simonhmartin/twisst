@@ -120,25 +120,28 @@ library(data.table)
 library(tools)
 
 #a function that imports weights 
-import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=TRUE, order_by_start=TRUE, na.rm=TRUE, max_window=Inf,
+import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=TRUE, reorder_by_start=FALSE, na.rm=TRUE, max_window=Inf,
                           lengths=NULL, topos_file=NULL, recalculate_mid=FALSE){
     l = list()
     
     if (length(window_data_files) > 1){
+        print("Reading weights and window data")
         l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
         l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
         }
     
     if (length(window_data_files) == 1){
-        l$window_data <- read.table(window_data_files, header=TRUE)
-        l$weights_raw <- read.table(weights_files, header=TRUE)
+        print("Reading weights and window data")
+        l$window_data <- list(read.table(window_data_files, header=TRUE))
+        l$weights_raw <- list(read.table(weights_files, header=TRUE))
         if (split_by_chrom == TRUE){
-            l$weights_raw <- split(l$weights_raw, l$window_data[,1])
-            l$window_data <- split(l$window_data, l$window_data[,1])
+            l$weights_raw <- split(l$weights_raw[[1]], l$window_data[[1]][,1])
+            l$window_data <- split(l$window_data[[1]], l$window_data[[1]][,1])
             }
         }
     
     if (is.null(window_data_files) == TRUE) {
+        print("Reading weights")
         l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
         n <- nrow(l$weights_raw[[1]])
         l$window_data <- list(data.frame(chrom=rep(0,n), start=1:n, end=1:n))
@@ -150,20 +153,27 @@ import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=
         names(l$window_data) <- names(l$weights_raw) <- paste0("region", 1:l$n_regions)
         }
     
-    if (order_by_start==TRUE & is.null(window_data_files) == FALSE){
+    print(paste("Number of regions:", l$n_regions))
+    
+    if (reorder_by_start==TRUE & is.null(window_data_files) == FALSE){
+        print("Reordering")
         orders = sapply(l$window_data, function(df) order(df[,2]), simplify=FALSE)
         l$window_data <- sapply(names(orders), function(x) l$window_data[[x]][orders[[x]],], simplify=F)
         l$weights_raw <- sapply(names(orders), function(x) l$weights_raw[[x]][orders[[x]],], simplify=F)
         }
     
+    print("Computing summaries")
+    
     l$weights <- sapply(l$weights_raw, function(raw) raw/apply(raw, 1, sum), simplify=FALSE)
-        
+    
     l$weights_mean <- lapply(l$weights, apply, 2, mean, na.rm=T)
     
     l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
     
     if (is.null(lengths) == TRUE) l$lengths <- sapply(l$window_data, function(df) tail(df$end,1), simplify=FALSE)
     else l$lengths = lengths
+    
+    print("Cleaning data")
     
     if (na.rm==TRUE){
         for (i in 1:l$n_regions){
@@ -183,6 +193,8 @@ import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=
         }
     
     l$pos=sapply(l$window_data, function(df) df$mid, simplify=FALSE)
+    
+    print("Getting topologies")
     
     #attempt to retrieve topologies
     l$topos=NULL
@@ -411,7 +423,8 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
 #code for plotting a summary boxplot
 plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, only_best=NULL, cols=topo_cols,
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
-                                label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
+                                label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, outline=FALSE,
+                                cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
     
     # Either order 1-15 or order with highest weigted topology first
     
@@ -430,8 +443,8 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
     
     #make the barplot
     boxplot(as.data.frame(rbindlist(twisst_object$weights))[,ord], col = cols[ord],
-            xaxt="n", las=1, xlim = c(.5, N+.5), ylab="Average weighting", cex=cex.outline, lwd=lwd.box)
-        
+            xaxt="n", las=1, xlim = c(.5, N+.5), ylab="Average weighting", outline=outline, cex=cex.outline, lwd=lwd.box)
+    
     #draw the trees
     #first make an empty plot for the trees. Ensure left and right marhins are the same
     par(mar=c(0,4,0,1))
