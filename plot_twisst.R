@@ -300,18 +300,29 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
            height=c(rep(1, nrow(topos_layout_matrix)), rep(rel_height, nrow(weights_layout_matrix))))
     
     if (show_topos == TRUE){
-        par(mar=c(1,1,1,1))
-        
-        for (i in 1:n_topos){
-            plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
-                    edge.width=5, label.offset=.4, cex=1)
-            mtext(side=3,text=paste0("topo",i), cex=0.75)
+        if (tree_type=="unrooted"){
+            par(mar=c(2,2,2,2), xpd=NA)
+            
+            for (i in 1:n_topos){
+                plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
+                        edge.width=5, label.offset=0.2, cex=1, rotate.tree = 90)
+                mtext(side=3,text=paste0("topo",i), cex=0.75)
+                }
+            }
+        else{
+            par(mar=c(1,1,1,1), xpd=NA)
+            
+            for (i in 1:n_topos){
+                plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
+                        edge.width=5, label.offset=0.4, cex=1, rotate.tree = 0)
+                mtext(side=3,text=paste0("topo",i), cex=0.75)
+                }
             }
         }
     
     if (is.null(ylim)==TRUE) ylim <- c(0,1)
     
-    par(mar=c(4,4,2,2))
+    par(mar=c(4,4,2,2), xpd=FALSE)
     
     if (concatenate == TRUE) {
         chrom_offsets = cumsum(twisst_object$lengths + gap) - (twisst_object$lengths + gap)
