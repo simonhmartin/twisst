@@ -46,6 +46,17 @@ def asciiTrees(trees, nColumns = 5):
     return "\n\n".join(["\n".join(["    ".join(l) for l in chunk]) for chunk in zippedLinesChunked])
 
 
+def getPrunedCopy(tree, leavesToKeep, preserve_branch_length):
+    pruned = tree.copy("newick")
+    ##prune function was too slow for big trees
+    ## speeding up by first deleting all other leaves
+    for leaf in pruned.iter_leaves():
+        if leaf.name not in leavesToKeep: leaf.delete(preserve_branch_length=preserve_branch_length)
+    #and then prune to fix the root (not sure why this is necessary, but it is)
+    #but at least it's faster than pruning the full tree
+    pruned.prune(leavesToKeep, preserve_branch_length = preserve_branch_length)
+    return pruned
+
 class NodeChain(deque):
     def __init__(self, nodeList, dists=None):
         super(NodeChain, self).__init__(nodeList)
@@ -301,6 +312,9 @@ def checkDisjointChains(leafLeafChains, pairsOfPairs, samples=None):
         return [leafLeafChains[samples[pairs[0][0]]][samples[pairs[0][1]]]._set_.isdisjoint(leafLeafChains[samples[pairs[1][0]]][samples[pairs[1][1]]]._set_) for pairs in pairsOfPairs]
 
 
+def pairsDisjoint(pair1,pair2):
+    return pair1[0] != pair2[0] and pair1[0] != pair2[1] and pair1[1] != pair2[0] and pair1[1] != pair2[1]
+
 def makeTopoDict(taxonNames, topos=None, outgroup = None):
     output = {}
     output["topos"] = allTopos(taxonNames, []) if topos is None else topos
@@ -309,8 +323,8 @@ def makeTopoDict(taxonNames, topos=None, outgroup = None):
     output["n"] = len(output["topos"])
     pairs = list(itertools.combinations(taxonNames,2))
     pairsNumeric = list(itertools.combinations(range(len(taxonNames)),2))
-    output["pairsOfPairs"] = [(sorted(y[0]),sorted(y[1]),) for y in itertools.combinations([set(x) for x in pairs],2) if y[0].isdisjoint(y[1])]
-    output["pairsOfPairsNumeric"] = [(sorted(y[0]),sorted(y[1]),) for y in itertools.combinations([set(x) for x in pairsNumeric],2) if y[0].isdisjoint(y[1])]
+    output["pairsOfPairs"] = [y for y in itertools.combinations(pairs,2) if pairsDisjoint(y[0],y[1])]
+    output["pairsOfPairsNumeric"] = [y for y in itertools.combinations(pairsNumeric,2) if pairsDisjoint(y[0],y[1])]
     output["chainsDisjoint"] = []
     for tree in output["topos"]:
         rootLeafChains = makeRootLeafChainDict(tree)
@@ -327,7 +341,8 @@ def makeGroupDict(groups, names=None):
 
 #Main weighting function that uses "chains" to check topologies and simplifies while generating chains
 def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
-                     getDists=False, simplify=True, abortCutoff=None, treeFormat="ete3", verbose=True):
+                     getDists=False, simplify=True, abortCutoff=None, treeFormat="ete3", verbose=True,
+                     taxonNames=None, outgroup=None):
     
     nTaxa = len(taxa)
     
@@ -346,8 +361,8 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
     for pair in _pairs: leafLeafChains[pair[0]][pair[1]].setSet()
     
     if topoDict is None:
-        taxonNames = [str(x) for x in range(len(taxa))]
-        topoDict = makeTopoDict(taxonNames, outgroup=taxonNames[-1])
+        if taxonNames is None: taxonNames = [str(x) for x in range(len(taxa))]
+        topoDict = makeTopoDict(taxonNames, outgroup=outgroup)
     
     _taxa = [[ind for ind in taxon if ind in leavesRetainedSet] for taxon in taxa]
     
@@ -362,7 +377,7 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
         if verbose: sys.stderr.write("Complete weighting for {} combinations\n".format(nCombos))
         #unless there are too many combos, in which case we abort
         if abortCutoff and nCombos > abortCutoff:
-            sys.stderr.write("Aborting\n")
+            if verbose: sys.stderr.write("Aborting\n")
             return None
         comboGenerator = itertools.product(*_taxa)
     #if we are doing a subset, then use a random combo generator, but make sure simplify was false
@@ -397,7 +412,17 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
 
 
 def weightTrees(trees, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
-                     getDists=False, simplify=True, abortCutoff=None, treeFormat="ete3", verbose=True):
+                     getDists=False, simplify=True, abortCutoff=None, treeFormat="ete3", verbose=True,
+                     taxonNames=None, outgroup=None):
+    
+    if not taxonDict: taxonDict = makeGroupDict(taxa)
+    
+    if topoDict is None:
+        if taxonNames is None: taxonNames = [str(x) for x in range(len(taxa))]
+        topoDict = makeTopoDict(taxonNames, outgroup=outgroup)
+    
+    if pairs is None:
+        pairs = [pair for taxPair in itertools.combinations(taxa,2) for pair in itertools.product(*taxPair)]
     
     allTreeData = [weightTree(tree, taxa, taxonDict=taxonDict, pairs=pairs, topoDict=topoDict, nIts=nIts, getDists=getDists, simplify=simplify, abortCutoff=abortCutoff, treeFormat=treeFormat, verbose=verbose) for tree in trees]
     
@@ -505,16 +530,14 @@ if __name__ == "__main__":
     namesSet = set(names)
     assert len(names) == len(namesSet), "Each sample should only be in one group."
     
-    taxonDict = {}
-    for x in range(nTaxa):
-        for y in taxa[x]: taxonDict[y] = taxonNames[x]
+    taxonDict = makeGroupDict(taxa, taxonNames)
     
     #get all topologies
     if args.inputTopos:
         with open(args.inputTopos, "rt") as tf: topos = [ete3.Tree(ln) for ln in tf.readlines()]
     else: topos = None
     
-    topoDict = makeTopoDict(taxonNames, topos, args.outgroup if args.outgroup else taxonNames[-1])
+    topoDict = makeTopoDict(taxonNames, topos, args.outgroup if args.outgroup else None)
     
     nTopos = topoDict["n"]
     
@@ -576,12 +599,12 @@ if __name__ == "__main__":
             
             if method == "complete":
                 
-                weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=makeGroupDict(taxa),
+                weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=taxonDict,
                                                 pairs=pairs, topoDict=topoDict, getDists=getDists,
                                                 simplify=not args.skip_simplify, abortCutoff=args.abortCutoff, verbose=args.verbose)
             
             if method == "fixed" or weightsData == None:
-                weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=makeGroupDict(taxa),
+                weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=taxonDict,
                                                 pairs=pairs, topoDict=topoDict, nIts=args.iterations, getDists=getDists, simplify=False, verbose=args.verbose)
             
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
@@ -603,7 +626,7 @@ if __name__ == "__main__":
         nTrees += 1
         
         if not args.silent:
-            sys.stderr.write(".")
+            print(".", end="", file=sys.stderr, flush=True)
             if nTrees % 100 == 0: sys.stderr.write(str(nTrees)+"\n")
     
     treeFile.close()
