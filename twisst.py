@@ -440,6 +440,15 @@ def weightTrees(trees, taxa=None, taxonDict=None, pairs=None, topoDict=None, nIt
     return output
 
 
+def summary(weightsData):
+    weights = np.apply_along_axis(lambda x: x/x.sum(), 1, weightsData["weights"])
+    meanWeights = weights.mean(axis=0)
+    for i in range(len(meanWeights)):
+        print("Topo", i+1)
+        print(weightsData["topos"][i].get_ascii())
+        print(round(meanWeights[i],3))
+        print("\n\n")
+
 def listToNwk(t):
     t = str(t)
     t = t.replace("[","(")
@@ -484,6 +493,12 @@ def writeWeights(filename, weightsData):
         weightsFile.write("\t".join(["topo" + str(x+1) for x in range(nTopos)]) + "\n")
         #write weights
         weightsFile.write("\n".join(["\t".join(row) for row in weightsData["weights"].astype(str)]) + "\n")
+
+
+def writeTsWindowData(filename, ts):
+    with open("filename", "wt") as dataFile:
+        dataFile.write("chrom\tstart\tend\n")
+        dataFile.write("\n".join(["\t".join(["chr1", str(tree.interval[0]), str(tree.interval[1])]) for tree in ts.trees()]) + "\n")
 
 #################################################################################################################################
 
