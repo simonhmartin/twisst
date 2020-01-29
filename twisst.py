@@ -411,9 +411,14 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
     return {"topos":topoDict["topos"], "weights":counts, "dists":meanDists}
 
 
-def weightTrees(trees, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
+def weightTrees(trees, taxa=None, taxonDict=None, pairs=None, topoDict=None, nIts=None,
                      getDists=False, simplify=True, abortCutoff=None, treeFormat="ete3", verbose=True,
                      taxonNames=None, outgroup=None):
+    
+    if taxa is None:
+        assert(treeFormat=="ts"), "Taxa must be specified as a list of lists."
+        if taxonNames is None: taxonNames = [str(pop.id) for pop in trees.populations()]
+        taxa = [[s for s in trees.samples() if str(trees.get_population(s)) == t] for t in taxonNames]
     
     if not taxonDict: taxonDict = makeGroupDict(taxa)
     
@@ -424,7 +429,9 @@ def weightTrees(trees, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=Non
     if pairs is None:
         pairs = [pair for taxPair in itertools.combinations(taxa,2) for pair in itertools.product(*taxPair)]
     
-    allTreeData = [weightTree(tree, taxa, taxonDict=taxonDict, pairs=pairs, topoDict=topoDict, nIts=nIts, getDists=getDists, simplify=simplify, abortCutoff=abortCutoff, treeFormat=treeFormat, verbose=verbose) for tree in trees]
+    _trees_ = trees.trees() if treeFormat=="ts" else trees
+    
+    allTreeData = [weightTree(tree, taxa, taxonDict=taxonDict, pairs=pairs, topoDict=topoDict, nIts=nIts, getDists=getDists, simplify=simplify, abortCutoff=abortCutoff, treeFormat=treeFormat, verbose=verbose) for tree in _trees_]
     
     output = {"topos":allTreeData[0]["topos"]}
     output["weights"] = np.array([x["weights"] for x in allTreeData])
