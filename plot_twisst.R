@@ -121,13 +121,14 @@ library(tools)
 
 #a function that imports weights 
 import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=TRUE, reorder_by_start=FALSE, na.rm=TRUE, max_window=Inf,
-                          lengths=NULL, topos_file=NULL, recalculate_mid=FALSE){
+                          lengths=NULL, topos_file=NULL, recalculate_mid=FALSE, names=NULL){
     l = list()
     
     if (length(window_data_files) > 1){
         print("Reading weights and window data")
         l$window_data <- lapply(window_data_files, read.table ,header=TRUE)
         l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
+        if (is.null(names) == FALSE) names(l$window_data) <- names(l$weights_raw) <- names
         }
     
     if (length(window_data_files) == 1){
@@ -145,6 +146,7 @@ import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=
         l$weights_raw <- lapply(weights_files, read.table, header=TRUE)
         n <- nrow(l$weights_raw[[1]])
         l$window_data <- list(data.frame(chrom=rep(0,n), start=1:n, end=1:n))
+        if (is.null(names) == FALSE) names(l$window_data) <- names
         }
     
     l$n_regions <- length(l$weights_raw)
@@ -207,7 +209,7 @@ import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=
         #otherwise we try to retrieve topologies from the (first) weights file
         n_topos = ncol(l$weights[[1]])
         if (file_ext(weights_files[1]) == "gz") cat="zcat" else cat="cat"
-        topos_text <- try(system(paste(cat, weights_files[[1]], "| head -n", n_topos), intern = T), TRUE)
+        topos_text <- try(system(paste(cat, weights_files[[1]], "2>/dev/null", "| head -n", n_topos), intern = T), silent=TRUE)
         try(l$topos <- read.tree(text = topos_text))
         try(names(l$topos) <- sapply(names(l$topos), substring, 2))
         }
@@ -243,7 +245,8 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
 
 
 plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions=NULL, ncol_weights=1,
-                        cols=topo_cols,xlim=NULL, ylim=NULL, mode=2, rel_height=3, tree_type="clad", concatenate=FALSE, gap=0){
+                        cols=topo_cols,xlim=NULL, ylim=NULL, mode=2, rel_height=3, tree_type="clad",
+                        concatenate=FALSE, gap=0, include_region_names=FALSE){
     
     if (mode==3) {
         stacked=TRUE
@@ -305,7 +308,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
             
             for (i in 1:n_topos){
                 plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
-                        edge.width=5, label.offset=0.2, cex=1, rotate.tree = 90)
+                        edge.width=5, label.offset=0.3, cex=1, rotate.tree = 90)
                 mtext(side=3,text=paste0("topo",i), cex=0.75)
                 }
             }
@@ -314,7 +317,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
             
             for (i in 1:n_topos){
                 plot.phylo(twisst_object$topos[[i]], type = tree_type, edge.color=cols[i],
-                        edge.width=5, label.offset=0.4, cex=1, rotate.tree = 0)
+                        edge.width=5, label.offset=0.3, cex=1, rotate.tree = 0)
                 mtext(side=3,text=paste0("topo",i), cex=0.75)
                 }
             }
@@ -343,7 +346,8 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$window_data[[j]][,c("start","end")]
             plot.weights(twisst_object$weights[[j]], positions, xlim=xlim, ylim = ylim,
-                         fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked)
+                         fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked,
+                         main = ifelse(include_region_names==TRUE, names(twisst_object$weights)[j], ""))
             }
         }
     }
