@@ -228,10 +228,15 @@ def getChainsToLeaves_ts(tree, node=None, collapseDict = None):
     if node is None: node = tree.root
     children = tree.children(node)
     if children == ():
-        #if it has no children is is a child, so just record a weight for the node and return is as a new 1-node chain
-        chain = NodeChain([node])
-        setattr(chain, "weight", 1)
-        return [chain]
+        #if it has no children is is a child
+        #if it's in the collapseDict or there is not collapseDict
+        #just record a weight for the node and return is as a new 1-node chain
+        if collapseDict is None or node in collapseDict:
+            chain = NodeChain([node])
+            setattr(chain, "weight", 1)
+            return [chain]
+        else:
+            return []
     #otherwise get chains for all children
     childrenChains = [getChainsToLeaves_ts(tree, child, collapseDict) for child in children]
     #now we have the chains from all children, we need to add the current node
@@ -366,7 +371,9 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
     
     _taxa = [[ind for ind in taxon if ind in leavesRetainedSet] for taxon in taxa]
     
-    if getDists: dists = np.zeros([nTaxa, nTaxa, nTopos])
+    if getDists:
+        assert taxonNames is not None, "taxonNames required for recording pairwise distances"
+        dists = np.zeros([nTaxa, nTaxa, topoDict["n"]])
     
     #we make a generator object for all combos
     nCombos = np.prod([len(t) for t in _taxa])
@@ -400,7 +407,7 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
             comboPairs = [(combo[pair[0]], combo[pair[1]],) for pairs in topoDict["pairsOfPairsNumeric"] for pair in pairs]
             currentDists = np.zeros([nTaxa,nTaxa])
             for comboPair in comboPairs:
-                taxPair = (taxonDict[comboPair[0]], taxonDict[comboPair[1]])
+                taxPair = (taxonNames.index(taxonDict[comboPair[0]]), taxonNames.index(taxonDict[comboPair[1]]))
                 currentDists[taxPair[0],taxPair[1]] = currentDists[taxPair[1],taxPair[0]] = sum(leafLeafChains[comboPair[0]][comboPair[1]].dists)
             dists[:,:,x] += currentDists*comboWeight
         
@@ -419,12 +426,12 @@ def weightTrees(trees, taxa=None, taxonDict=None, pairs=None, topoDict=None, nIt
         assert(treeFormat=="ts"), "Taxa must be specified as a list of lists."
         if taxonNames is None: taxonNames = [str(pop.id) for pop in trees.populations()]
         taxa = [[s for s in trees.samples() if str(trees.get_population(s)) == t] for t in taxonNames]
-    
-    if not taxonDict: taxonDict = makeGroupDict(taxa)
-    
+        
     if topoDict is None:
         if taxonNames is None: taxonNames = [str(x) for x in range(len(taxa))]
         topoDict = makeTopoDict(taxonNames, outgroup=outgroup)
+    
+    if not taxonDict: taxonDict = makeGroupDict(taxa, names=taxonNames)
     
     if pairs is None:
         pairs = [pair for taxPair in itertools.combinations(taxa,2) for pair in itertools.product(*taxPair)]
@@ -434,14 +441,18 @@ def weightTrees(trees, taxa=None, taxonDict=None, pairs=None, topoDict=None, nIt
     allTreeData = [weightTree(tree, taxa, taxonDict=taxonDict, pairs=pairs, topoDict=topoDict, nIts=nIts, getDists=getDists, simplify=simplify, abortCutoff=abortCutoff, treeFormat=treeFormat, verbose=verbose) for tree in _trees_]
     
     output = {"topos":allTreeData[0]["topos"]}
-    output["weights"] = np.array([x["weights"] for x in allTreeData])
     output["dists"] = np.array([x["dists"] for x in allTreeData])
+    output["weights"] = np.array([x["weights"] for x in allTreeData])
+    output["weights_norm"] = np.apply_along_axis(lambda x: x/x.sum(), 1, output["weights"])
     
     return output
 
 
 def summary(weightsData):
-    weights = np.apply_along_axis(lambda x: x/x.sum(), 1, weightsData["weights"])
+    if "weights_norm" not in weightsData:
+        weights = np.apply_along_axis(lambda x: x/x.sum(), 1, weightsData["weights"])
+    else:
+        weights =weightsData["weights_norm"]
     meanWeights = weights.mean(axis=0)
     for i in range(len(meanWeights)):
         print("Topo", i+1)
@@ -623,11 +634,12 @@ if __name__ == "__main__":
                 
                 weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=taxonDict,
                                                 pairs=pairs, topoDict=topoDict, getDists=getDists,
-                                                simplify=not args.skip_simplify, abortCutoff=args.abortCutoff, verbose=args.verbose)
+                                                simplify=not args.skip_simplify, abortCutoff=args.abortCutoff, verbose=args.verbose, taxonNames=taxonNames)
             
             if method == "fixed" or weightsData == None:
                 weightsData = weightTree(tree=tree, taxa=taxa, taxonDict=taxonDict,
-                                                pairs=pairs, topoDict=topoDict, nIts=args.iterations, getDists=getDists, simplify=False, verbose=args.verbose)
+                                                pairs=pairs, topoDict=topoDict, nIts=args.iterations, getDists=getDists,
+                                                simplify=False, verbose=args.verbose, taxonNames=taxonNames)
             
             weightsLine = "\t".join([str(x) for x in weightsData["weights"]])
         
