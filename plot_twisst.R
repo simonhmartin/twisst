@@ -208,7 +208,7 @@ import.twisst <- function(weights_files, window_data_files=NULL, split_by_chrom=
     else{
         #otherwise we try to retrieve topologies from the (first) weights file
         n_topos = ncol(l$weights[[1]])
-        if (file_ext(weights_files[1]) == "gz") cat="zcat" else cat="cat"
+        if (file_ext(weights_files[1]) == "gz") cat="gunzip -c" else cat="cat"
         topos_text <- try(system(paste(cat, weights_files[[1]], "2>/dev/null", "| head -n", n_topos), intern = T), silent=TRUE)
         try(l$topos <- read.tree(text = topos_text))
         try(names(l$topos) <- sapply(names(l$topos), substring, 2))
