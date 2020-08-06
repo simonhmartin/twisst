@@ -397,8 +397,12 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
     counts = [0]*topoDict["n"]
     i=0
     for combo in comboGenerator:
+        i += 1
         chainsDisjoint = checkDisjointChains(leafLeafChains, topoDict["pairsOfPairsNumeric"], samples=combo)
-        x = topoDict["chainsDisjoint"].index(chainsDisjoint)
+        try: x = topoDict["chainsDisjoint"].index(chainsDisjoint)
+        except:
+            if i == nIts: break
+            continue
         comboWeight = np.prod([leafWeights[ind] for ind in combo]) 
         counts[x] += comboWeight
         
@@ -411,7 +415,6 @@ def weightTree(tree, taxa, taxonDict=None, pairs=None, topoDict=None, nIts=None,
                 currentDists[taxPair[0],taxPair[1]] = currentDists[taxPair[1],taxPair[0]] = sum(leafLeafChains[comboPair[0]][comboPair[1]].dists)
             dists[:,:,x] += currentDists*comboWeight
         
-        i += 1
         if i == nIts: break
     
     meanDists = dists/counts if getDists else np.NaN
