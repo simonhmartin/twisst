@@ -108,3 +108,20 @@ for (n in 1:length(twisst_data$topos)){
   mtext(side=3,text=paste0("topo",n))
   }
 
+################## subset to only the most abundant topologies #################
+
+#get list of the top two most abundant topologies
+top2_topos <- order(twisst_data$weights_overall_mean, decreasing=T)[1:2]
+
+#subset twisst object for these
+twisst_data_top2topos <- subset.twisst.by.topos(twisst_data, top2_topos)
+#this can then be used in all the same plotting functions above.
+
+###################### subset to only specific regions #########################
+
+#regions to keep (more than one can be specified)
+regions <- c("contig0")
+
+#subset twisst object for these
+twisst_data_contig0 <- subset.twisst.by.regions(twisst_data, regions)
+#this can then be used in all the same plotting functions above.

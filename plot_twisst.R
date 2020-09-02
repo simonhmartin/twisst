@@ -477,3 +477,34 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
     text(1:N,.9,topo_names[ord],col=cols[ord])
     }
 
+#function for subsetting the twisst object by a set of topologies
+subset.twisst.by.topos <- function(twisst_object, topos){
+    l <- list()
+    regions <- names(twisst_object$weights)
+    l$window_data <- twisst_object$window_data
+    l$n_regions <- twisst_object$n_regions
+    l$lengths <- twisst_object$lengths
+    l$pos <- twisst_object$pos
+    l$weights_raw <- sapply(regions, function(region) twisst_data$weights_raw[[region]][,topos], simplify=F)
+    l$weights <- sapply(regions, function(region) twisst_data$weights[[region]][,topos], simplify=F)
+    l$weights_mean <- sapply(regions, function(region) twisst_data$weights_mean[[region]][topos], simplify=F)
+    l$weights_overall_mean <- twisst_data$weights_overall_mean[topos]
+    l$topos <- twisst_data$topos[topos]
+    l
+    }
+
+#function for subsetting the twisst object by specific regions
+subset.twisst.by.regions <- function(twisst_object, regions){
+    l <- list()
+    regions <- names(twisst_object$weights[regions])
+    l$window_data <- twisst_object$window_data[regions]
+    l$n_regions <- length(regions)
+    l$lengths <- twisst_object$lengths[regions]
+    l$pos <- twisst_object$pos[regions]
+    l$weights_raw <- twisst_data$weights_raw[regions]
+    l$weights <- twisst_data$weights[regions]
+    l$weights_mean <- twisst_data$weights_mean[regions]
+    l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
+    l$topos <- twisst_data$topos
+    l
+    }
