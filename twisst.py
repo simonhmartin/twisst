@@ -498,15 +498,14 @@ def allTopos(branches, _topos=None, _topo_IDs=None):
     #print(_topo_IDs)
     return(_topos)
 
-def writeWeights(filename, weightsData):
+def writeWeights(weightsFile, weightsData, include_topologies=True, include_header=True):
     nTopos = len(weightsData["topos"])
-    with gzip.open(filename, "wt") if filename.endswith(".gz") else open(filename, "wt") as weightsFile:
-        #write topologies
+    if include_topologies:
         for x in range(nTopos): weightsFile.write("#topo" + str(x+1) + " " + weightsData["topos"][x].write(format = 9) + "\n") 
-        #write headers
+    if include_header:
         weightsFile.write("\t".join(["topo" + str(x+1) for x in range(nTopos)]) + "\n")
-        #write weights
-        weightsFile.write("\n".join(["\t".join(row) for row in weightsData["weights"].astype(str)]) + "\n")
+    #write weights
+    weightsFile.write("\n".join(["\t".join(row) for row in weightsData["weights"].astype(str)]) + "\n")
 
 
 def writeTsWindowData(filename, ts):
