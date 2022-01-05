@@ -235,7 +235,7 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
         
         if (is.null(spacing) == TRUE) spacing <- twisst_object$length[[i]]*span*.1
         
-        l$pos[[i]] <- seq(twisst_object$pos[[i]][1], tail(twisst_object$pos[[i]],1), spacing)
+        l$pos[[i]] <- seq(min(twisst_object$pos[[i]][1]), max(twisst_object$pos[[i]],1), spacing)
         
         l$weights[[i]] <- smooth.weights(twisst_object$pos[[i]], twisst_object$weights[[i]], new_x <- l$pos[[i]], span = span,
                                          window_sites=twisst_object$window_data$sites[[i]])
