@@ -243,10 +243,38 @@ smooth.twisst <- function(twisst_object, span=0.05, span_bp=NULL, spacing=NULL) 
     l
     }
 
+is.hex.col <- function(string){
+    strvec <- strsplit(string, "")[[1]]
+    if (strvec[1] != "#") return(FALSE)
+    if (length(strvec) != 7 & length(strvec) != 9) return(FALSE)
+    for (character in strvec[-1]){
+        if (!(character %in% c("0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f","A","B","C","D","E","F"))) return(FALSE)
+        }
+    TRUE
+    }
+
+hex.transparency <- function(hex, transstring="88"){
+    if (is.hex.col(hex)==FALSE){
+        print("WARNING: colour not hexadecimal. Cannot modify transparency.")
+        return(hex)
+        }
+    if (nchar(hex) == 7) return(paste0(hex, transstring))
+    else {
+        substr(hex,8,9) <- transstring
+        return(hex)
+        }
+    }
+
 
 plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions=NULL, ncol_weights=1,
                         cols=topo_cols,xlim=NULL, ylim=NULL, mode=2, rel_height=3, tree_type="clad",
                         concatenate=FALSE, gap=0, include_region_names=FALSE){
+    
+    #check if there are enough colours
+    if (length(twisst_object$topos) > length(cols)){
+        print("Not enough colours provided (option 'cols'), using rainbow instead")
+        cols = rainbow(length(twisst_object$topos))
+        }
     
     if (mode==3) {
         stacked=TRUE
@@ -257,7 +285,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
     
     if (mode==2) {
         stacked=FALSE
-        fill_cols = paste0(cols,80)
+        fill_cols = sapply(cols, hex.transparency, transstring="80")
         line_cols = cols
         lwd=par("lwd")
         }
@@ -337,7 +365,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions) {
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]] + chrom_offsets[j]
             else positions <- twisst_object$window_data[[j]][,c("start","end")] + chrom_offsets[j]
-            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim,
+            plot.weights(twisst_object$weights[[j]][1:length(twisst_object$topos)], positions, xlim=xlim,
                          fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked, add=T)
             }
         }
@@ -345,7 +373,7 @@ plot.twisst <- function(twisst_object, show_topos=TRUE, ncol_topos=NULL, regions
         for (j in regions){
             if (is.null(twisst_object$window_data[[j]])) positions <- twisst_object$pos[[j]]
             else positions <- twisst_object$window_data[[j]][,c("start","end")]
-            plot.weights(twisst_object$weights[[j]], positions, xlim=xlim, ylim = ylim,
+            plot.weights(twisst_object$weights[[j]][1:length(twisst_object$topos)], positions, xlim=xlim, ylim = ylim,
                          fill_cols = fill_cols, line_cols=line_cols,lwd=lwd,stacked=stacked,
                          main = ifelse(include_region_names==TRUE, names(twisst_object$weights)[j], ""))
             }
@@ -486,10 +514,10 @@ subset.twisst.by.topos <- function(twisst_object, topos){
     l$lengths <- twisst_object$lengths
     l$pos <- twisst_object$pos
     l$weights_raw <- sapply(regions, function(region) twisst_data$weights_raw[[region]][,topos], simplify=F)
-    l$weights <- sapply(regions, function(region) twisst_data$weights[[region]][,topos], simplify=F)
-    l$weights_mean <- sapply(regions, function(region) twisst_data$weights_mean[[region]][topos], simplify=F)
-    l$weights_overall_mean <- twisst_data$weights_overall_mean[topos]
-    l$topos <- twisst_data$topos[topos]
+    l$weights <- sapply(regions, function(region) twisst_object$weights[[region]][,topos], simplify=F)
+    l$weights_mean <- sapply(regions, function(region) twisst_object$weights_mean[[region]][topos], simplify=F)
+    l$weights_overall_mean <- twisst_object$weights_overall_mean[topos]
+    l$topos <- twisst_object$topos[topos]
     l
     }
 
@@ -501,10 +529,10 @@ subset.twisst.by.regions <- function(twisst_object, regions){
     l$n_regions <- length(regions)
     l$lengths <- twisst_object$lengths[regions]
     l$pos <- twisst_object$pos[regions]
-    l$weights_raw <- twisst_data$weights_raw[regions]
-    l$weights <- twisst_data$weights[regions]
-    l$weights_mean <- twisst_data$weights_mean[regions]
+    l$weights_raw <- twisst_object$weights_raw[regions]
+    l$weights <- twisst_object$weights[regions]
+    l$weights_mean <- twisst_object$weights_mean[regions]
     l$weights_overall_mean <- apply(rbindlist(l$weights), 2, mean, na.rm=T)
-    l$topos <- twisst_data$topos
+    l$topos <- twisst_object$topos
     l
     }
