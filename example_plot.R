@@ -88,6 +88,25 @@ plot.weights(weights_dataframe=twisst_data_smooth$weights[[1]], positions=twisst
 
 
 
+#################### subset to only the most abundant topologies #################
+
+#get list of the most abundant topologies (top 2 in this case)
+top2_topos <- order(twisst_data$weights_overall_mean, decreasing=T)[1:2]
+
+#subset twisst object for these
+twisst_data_top2topos <- subset.twisst.by.topos(twisst_data, top2_topos)
+#this can then be used in all the same plotting functions above.
+
+######################## subset to only specific regions #########################
+
+#regions to keep (more than one can be specified)
+regions <- c("contig0")
+
+#subset twisst object for these
+twisst_data_contig0 <- subset.twisst.by.regions(twisst_data, regions)
+#this can then be used in all the same plotting functions above.
+
+
 ########################### plot topologies using Ape ##########################
 #unrooted trees
 for (i in 1:length(twisst_data$topos)) twisst_data$topos[[i]] <- ladderize(unroot(twisst_data$topos[[i]]))
@@ -108,20 +127,29 @@ for (n in 1:length(twisst_data$topos)){
   mtext(side=3,text=paste0("topo",n))
   }
 
-#################### subset to only the most abundant topologies #################
 
-#get list of the most abundant topologies (top 2 in this case)
-top2_topos <- order(twisst_data$weights_overall_mean, decreasing=T)[1:2]
+################### plot a full tree for a specific window ######################
 
-#subset twisst object for these
-twisst_data_top2topos <- subset.twisst.by.topos(twisst_data, top2_topos)
-#this can then be used in all the same plotting functions above.
+#read in the raw trees (newick format, can be gzipped)
+trees <- read.tree("examples/msms_4of10_l1Mb_r10k_sweep.seq_gen.SNP.w50sites.phyml_bionj.trees.gz")
 
-######################## subset to only specific regions #########################
+#Fins all windows in which Topo2 has a weighting above 0.9 
+#Note that to do this we have to look inside the twisst_data object
+which(twisst_data$weights$contig0$topo2 > 0.9)
 
-#regions to keep (more than one can be specified)
-regions <- c("contig0")
+#Specify the window for which we want to plot the tree
+i=46
 
-#subset twisst object for these
-twisst_data_contig0 <- subset.twisst.by.regions(twisst_data, regions)
-#this can then be used in all the same plotting functions above.
+#check where on the chromosome this tree appears
+twisst_data$window_data$contig0[i,]
+
+#plot either an unrooted or rooted tree.
+#Note his is a function in the package 'ape' read about the options here https://cran.r-project.org/web/packages/ape/ape.pdf
+plot.phylo(trees[[i]], type="unrooted", use.edge.length=F)
+#plot.phylo(trees[[i]], type="cladgram", use.edge.length=F)
+
+#add symbols for tips (again, this is a fucntion from ape)
+tiplabels(pch = c(rep(21,10), rep(22,10), rep(23,10), rep(24,10)),
+          bg =  c(rep("red",10), rep("green",10), rep("blue",10), rep("gray",10)),
+          col = "black", cex = 1, adj = 0.5)
+
