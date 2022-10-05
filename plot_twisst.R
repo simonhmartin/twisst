@@ -428,6 +428,12 @@ plot.twisst.summary <- function(twisst_object, order_by_weights=TRUE, only_best=
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
                                 label_offset = 0.05, lwd=NULL, cex=NULL){
     
+    #check if there are enough colours
+    if (length(twisst_object$topos) > length(cols)){
+        print("Not enough colours provided (option 'cols'), using rainbow instead")
+        cols = rainbow(length(twisst_object$topos))
+        }
+    
     # Either order 1-15 or order with highest weigted topology first
     
     if (order_by_weights == TRUE) {
@@ -468,6 +474,12 @@ plot.twisst.summary.boxplot <- function(twisst_object, order_by_weights=TRUE, on
                                 x_scale=0.12, y_scale=0.15, direction="right", col="black", col.label="black",
                                 label_offset = 0.05, lwd=NULL, label_alias=NULL, cex=NULL, outline=FALSE,
                                 cex.outline=NULL, lwd.box=NULL, topo_names=NULL){
+    
+    #check if there are enough colours
+    if (length(twisst_object$topos) > length(cols)){
+        print("Not enough colours provided (option 'cols'), using rainbow instead")
+        cols = rainbow(length(twisst_object$topos))
+        }
     
     # Either order 1-15 or order with highest weigted topology first
     
