@@ -1,4 +1,3 @@
-import numpy as np
 import msprime
 import demes
 import demesdraw
@@ -72,33 +71,42 @@ demes_graph = four_pop_model()
 fig=demesdraw.tubes(demes_graph).get_figure()
 fig.savefig("model_graph.pdf", bbox_inches='tight')
 
-
+# Simulate treesequence (msprime data structure that contains all trees)
 ts = msprime.sim_ancestry(samples={"V":4, "W":4, "X":4, "Y":4, "Z":4},
                           demography=msprime.Demography.from_demes(demes_graph),
                           sequence_length = 1e5,
                           recombination_rate = 5e-8, ploidy=2)
 
+# run twisst code that computes weights.
+# Here the populations are numbered. Nite that their numbers correspond to the order in which they
+# were defined, so 4, 5, 6, 7, 8, correspond to V, W, X, Y , Z.
 results = twisst.weightTrees(ts, treeFormat="ts",
                    taxonNames=["4","5","6","7","8"],
                                outgroup="8", verbose=False)
 
-#write to output files
+#view quick summary
+twisst.summary(results)
+
+#write to output file
 with gzip.open("sim_1chrom_weights.tsv.gz", "wt") as weights_file:
     twisst.writeWeights(weights_file, results)
 
 
 ############################ simulate blocks #########################
+# For faster simulation (but sacrificing real LD relationships),
+# we simulate a shorter tract (a block) and just repeat many times.
 
+# How many blocks
 n_blocks=500
 
-# run simulations to produce tree sequence objects
+# run simulations to produce a list of tree sequence objects (a ts for each block)
 ts_blocks =  [msprime.sim_ancestry(samples={"V":4, "W":4, "X":4, "Y":4, "Z":4},
                                    demography=msprime.Demography.from_demes(demes_graph),
                                    sequence_length = 1e4,
                                    recombination_rate = 1e-8, ploidy=2) for i in range(n_blocks)]
 
 
-#get topology weights from Twisst
+#get topology weights using Twisst for each block.
 results_blocks = [None]*n_blocks
 
 for i in range(n_blocks):
@@ -107,10 +115,8 @@ for i in range(n_blocks):
                                            taxonNames=["4","5","6","7","8"],
                                            outgroup="8", verbose=False)
 
-#view quick summary
-#twisst.summary(results_blocks[0])
 
-#write to output files
+#write to output file by concatenating blocks
 with gzip.open("sim_500blocks_weights.tsv.gz", "wt") as weights_file:
     for i in range(n_blocks):
         twisst.writeWeights(weights_file, results_blocks[i], include_topologies=True if i==0 else False, include_header=True if i==0 else False)
