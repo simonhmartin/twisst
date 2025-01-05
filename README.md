@@ -1,5 +1,7 @@
 # Twisst: Topology weightying by iterative sampling of sub-trees
 
+#### NOTE: Twisst2 is ready for testing. It provides significant improvements. It has it's own repository [here](https://github.com/simonhmartin/twisst2).
+
 Topology weighting is a means to quantify relationships between taxa that are not necessarily monophyletic. It's a simple, descriptive method, designed for exploring how relationship vary across the genome using population genomic data.
 
 The relationship among a given set of taxa can be defined by a number of possible topologies. For example, for four taxa labelled A, B, C and D, there are three possible (unrooted) bifurcating topologies:
